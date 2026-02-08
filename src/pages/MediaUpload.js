@@ -16,16 +16,29 @@ import {
   Grow,
   Alert,
   Snackbar,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  TextField,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions,
+  InputAdornment,
 } from '@mui/material';
 import {
   CloudUpload as CloudUploadIcon,
   VideoFile as VideoFileIcon,
   Image as ImageIcon,
   Close as CloseIcon,
+  Folder as FolderIcon,
+  CreateNewFolder as CreateFolderIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 import { uploadToS3 } from '../services/s3Service';
-import { saveMedia } from '../services/mediaService';
+import { saveMedia, getFolders, createFolder } from '../services/mediaService';
 import { getUserStorage, updateStorageUsage } from '../services/storageService';
 
 const MediaUpload = () => {
@@ -35,14 +48,59 @@ const MediaUpload = () => {
   const [uploadProgress, setUploadProgress] = useState({});
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
   const [availableStorage, setAvailableStorage] = useState(0);
+  const [selectedFolder, setSelectedFolder] = useState('');
+  const [folders, setFolders] = useState([]);
+  const [createFolderDialog, setCreateFolderDialog] = useState({ open: false, name: '' });
 
   useEffect(() => {
     loadStorage();
+    loadFolders();
   }, []);
 
   const loadStorage = async () => {
     const storage = await getUserStorage(user.id);
     setAvailableStorage(storage.availableStorage);
+  };
+
+  const loadFolders = async () => {
+    try {
+      const folderList = await getFolders(user.id);
+      setFolders(folderList);
+    } catch (error) {
+      console.error('Failed to load folders:', error);
+    }
+  };
+
+  const handleCreateFolder = async () => {
+    if (!createFolderDialog.name.trim()) {
+      setSnackbar({
+        open: true,
+        message: 'Please enter a folder name',
+        severity: 'error',
+      });
+      return;
+    }
+
+    try {
+      const newFolder = await createFolder({
+        userId: user.id,
+        name: createFolderDialog.name.trim(),
+      });
+      await loadFolders();
+      setSelectedFolder(newFolder.id);
+      setCreateFolderDialog({ open: false, name: '' });
+      setSnackbar({
+        open: true,
+        message: 'Folder created successfully',
+        severity: 'success',
+      });
+    } catch (error) {
+      setSnackbar({
+        open: true,
+        message: 'Failed to create folder',
+        severity: 'error',
+      });
+    }
   };
 
   const onDrop = useCallback((acceptedFiles) => {
@@ -135,6 +193,7 @@ const MediaUpload = () => {
           type: fileItem.file.type,
           url: result.url,
           key: result.key,
+          folderId: selectedFolder || null,
         });
 
         await updateStorageUsage(user.id, fileSizeInGB);
@@ -182,6 +241,41 @@ const MediaUpload = () => {
               Storage limit reached! Please purchase more storage to upload files.
             </Alert>
           )}
+
+          {/* Folder Selection */}
+          <Paper elevation={2} sx={{ p: 2, mb: 3, borderRadius: 2 }}>
+            <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+              <FormControl size="small" sx={{ minWidth: 200, flexGrow: 1 }}>
+                <InputLabel>Select Folder</InputLabel>
+                <Select
+                  value={selectedFolder}
+                  label="Select Folder"
+                  onChange={(e) => setSelectedFolder(e.target.value)}
+                  startAdornment={
+                    <InputAdornment position="start">
+                      <FolderIcon sx={{ ml: 1, color: 'text.secondary' }} />
+                    </InputAdornment>
+                  }
+                >
+                  <MenuItem value="">
+                    <em>Root (No Folder)</em>
+                  </MenuItem>
+                  {folders.map((folder) => (
+                    <MenuItem key={folder.id} value={folder.id}>
+                      {folder.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <Button
+                variant="outlined"
+                startIcon={<CreateFolderIcon />}
+                onClick={() => setCreateFolderDialog({ open: true, name: '' })}
+              >
+                Create Folder
+              </Button>
+            </Box>
+          </Paper>
 
           <Paper
             elevation={4}
@@ -328,6 +422,41 @@ const MediaUpload = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
+
+      {/* Create Folder Dialog */}
+      <Dialog
+        open={createFolderDialog.open}
+        onClose={() => setCreateFolderDialog({ open: false, name: '' })}
+        TransitionComponent={Fade}
+      >
+        <DialogTitle>Create New Folder</DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ mb: 2 }}>
+            Enter a name for the new folder to organize your media files.
+          </DialogContentText>
+          <TextField
+            autoFocus
+            fullWidth
+            label="Folder Name"
+            value={createFolderDialog.name}
+            onChange={(e) => setCreateFolderDialog({ ...createFolderDialog, name: e.target.value })}
+            placeholder="e.g., Vacation Photos, Work Videos"
+            onKeyPress={(e) => {
+              if (e.key === 'Enter') {
+                handleCreateFolder();
+              }
+            }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setCreateFolderDialog({ open: false, name: '' })}>
+            Cancel
+          </Button>
+          <Button onClick={handleCreateFolder} variant="contained">
+            Create
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Container>
   );
 };
