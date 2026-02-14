@@ -1,101 +1,87 @@
-// Mock storage service - Replace with actual backend API calls
-export const getStoragePlans = () => {
-  return [
-    {
-      id: '1gb-monthly',
-      storage: 1,
-      price: 3,
-      period: 'month',
-      periodLabel: 'per month',
-    },
-    {
-      id: '1gb-yearly',
-      storage: 1,
-      price: 30,
-      period: 'year',
-      periodLabel: 'per year',
-    },
-  ];
+import axios from 'axios';
+import API_BASE_URL from '../config/api';
+
+axios.defaults.baseURL = axios.defaults.baseURL || API_BASE_URL;
+
+/** Get storage plans (public) */
+export const getStoragePlans = async () => {
+  try {
+    const res = await axios.get('/storage/plans');
+    return Array.isArray(res.data) ? res.data : [];
+  } catch (error) {
+    console.error('Failed to fetch storage plans:', error);
+    return [];
+  }
 };
 
-export const purchaseStorage = async (planData, userId) => {
-  // Simulate API call
-  // planData can be either:
-  // - Old format: { planId: '1gb-monthly' }
-  // - New format: { storage: 50, period: 'month', price: 150 }
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      // Update user storage in localStorage
-      const currentStorage = JSON.parse(localStorage.getItem('userStorage') || '{}');
-      
-      let storageToAdd = 0;
-      let message = 'Storage plan purchased successfully';
-      
-      // Handle new custom storage format
-      if (planData.storage) {
-        storageToAdd = planData.storage;
-        message = `${planData.storage} GB storage purchased successfully`;
-      } 
-      // Handle old planId format (for backward compatibility)
-      else if (planData.planId) {
-        const plan = getStoragePlans().find(p => p.id === planData.planId);
-        if (plan) {
-          storageToAdd = plan.storage;
-        }
-      }
-      
-      const newTotal = (currentStorage[userId]?.totalStorage || 0) + storageToAdd;
-      const newUsed = currentStorage[userId]?.usedStorage || 0;
-      
-      localStorage.setItem('userStorage', JSON.stringify({
-        ...currentStorage,
-        [userId]: {
-          totalStorage: newTotal,
-          usedStorage: newUsed,
-          availableStorage: newTotal - newUsed,
-        }
-      }));
-      
-      resolve({
-        success: true,
-        message: message,
-        storage: storageToAdd,
-      });
-    }, 1500);
-  });
+/** Get dashboard data: storage + video/image counts (requires auth) */
+export const getDashboard = async () => {
+  try {
+    const res = await axios.get('/storage/dashboard');
+    return res.data || {};
+  } catch (error) {
+    console.error('Failed to fetch dashboard:', error);
+    return {};
+  }
 };
 
+/** Get my drives (purchased/default plans) for logged-in user — same shape as studio client plans */
+export const getMyPlans = async () => {
+  const res = await axios.get('/storage/my-plans');
+  return Array.isArray(res.data) ? res.data : [];
+};
+
+/** Move media between drives. fromUserPlanId / toUserPlanId: 'default' or plan id */
+export const moveMediaBetweenDrives = async (fromUserPlanId, toUserPlanId, mediaIds = null) => {
+  const body = { fromUserPlanId: String(fromUserPlanId), toUserPlanId: String(toUserPlanId) };
+  if (Array.isArray(mediaIds) && mediaIds.length > 0) body.mediaIds = mediaIds;
+  const res = await axios.post('/storage/move-media', body);
+  return res.data;
+};
+
+/** Get current user's storage (requires auth) */
 export const getUserStorage = async (userId) => {
-  // Mock storage data - Replace with actual API call
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      const storage = JSON.parse(localStorage.getItem('userStorage') || '{}');
-      const userStorage = storage[userId] || {
-        totalStorage: 1, // GB
-        usedStorage: 0, // GB
-        availableStorage: 1, // GB
-      };
-      resolve(userStorage);
-    }, 500);
-  });
+  try {
+    const res = await axios.get('/storage/user');
+    const s = res.data;
+    if (!s) return { totalStorage: 1, usedStorage: 0, availableStorage: 1 };
+    return {
+      totalStorage: parseFloat(s.totalStorage) || 0,
+      usedStorage: parseFloat(s.usedStorage) || 0,
+      availableStorage: parseFloat(s.availableStorage) ?? (parseFloat(s.totalStorage) || 0) - (parseFloat(s.usedStorage) || 0),
+    };
+  } catch (error) {
+    console.error('Failed to fetch user storage:', error);
+    return { totalStorage: 1, usedStorage: 0, availableStorage: 1 };
+  }
 };
 
+/** Purchase storage (requires auth). planData: { storage, period, price, planId } */
+export const purchaseStorage = async (planData, userId) => {
+  try {
+    const body = {
+      storage: planData.storage,
+      period: planData.period,
+      price: planData.price,
+    };
+    if (planData.planId != null) body.planId = planData.planId;
+    const res = await axios.post('/storage/purchase', body);
+    const data = res.data;
+    if (data && data.success) {
+      return { success: true, message: data.message || 'Storage purchased successfully', storage: data.storage };
+    }
+    throw new Error(data?.message || 'Purchase failed');
+  } catch (error) {
+    const msg = error.response?.data?.message || error.message || 'Purchase failed';
+    throw new Error(msg);
+  }
+};
+
+/** No longer used for customer – backend updates storage on upload/delete */
 export const updateStorageUsage = async (userId, sizeInGB) => {
-  // Update storage usage after upload
-  const storage = JSON.parse(localStorage.getItem('userStorage') || '{}');
-  const userStorage = storage[userId] || {
-    totalStorage: 1,
-    usedStorage: 0,
-    availableStorage: 1,
-  };
-  
-  userStorage.usedStorage += sizeInGB;
-  userStorage.availableStorage = userStorage.totalStorage - userStorage.usedStorage;
-  
-  localStorage.setItem('userStorage', JSON.stringify({
-    ...storage,
-    [userId]: userStorage,
-  }));
-  
-  return userStorage;
+  return Promise.resolve();
+};
+
+export const updateStoragePlan = async (planData) => {
+  return Promise.resolve({ success: true });
 };

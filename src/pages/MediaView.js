@@ -15,6 +15,7 @@ import {
   Fullscreen as FullscreenIcon,
 } from '@mui/icons-material';
 import { getMediaById } from '../services/mediaService';
+import { getMediaUrl } from '../config/api';
 
 const MediaView = () => {
   const { id } = useParams();
@@ -76,14 +77,22 @@ const MediaView = () => {
   }
 
   return (
-    <Container maxWidth="lg">
+    <Container maxWidth="lg" sx={{ px: { xs: 1, sm: 2, md: 3 } }}>
       <Fade in timeout={600}>
         <Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-            <IconButton onClick={() => navigate('/media')} sx={{ mr: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: { xs: 2, sm: 3 }, flexWrap: 'wrap', gap: 1 }}>
+            <IconButton onClick={() => navigate('/media')} sx={{ mr: { xs: 1, sm: 2 } }}>
               <ArrowBackIcon />
             </IconButton>
-            <Typography variant="h5" sx={{ fontWeight: 'bold', flexGrow: 1 }}>
+            <Typography 
+              variant="h5" 
+              sx={{ 
+                fontWeight: 'bold', 
+                flexGrow: 1,
+                fontSize: { xs: '1.25rem', sm: '1.5rem', md: '1.75rem' },
+                wordBreak: 'break-word'
+              }}
+            >
               {media.name}
             </Typography>
             {media.category === 'video' && (
@@ -96,7 +105,7 @@ const MediaView = () => {
           <Paper
             elevation={4}
             sx={{
-              p: { xs: 2, sm: 3 },
+              p: { xs: 1, sm: 2, md: 3 },
               borderRadius: 3,
               overflow: 'hidden',
             }}
@@ -106,7 +115,7 @@ const MediaView = () => {
                 id="media-viewer"
                 sx={{
                   width: '100%',
-                  maxHeight: '80vh',
+                  maxHeight: { xs: '50vh', sm: '70vh', md: '80vh' },
                   display: 'flex',
                   justifyContent: 'center',
                   bgcolor: 'black',
@@ -117,10 +126,11 @@ const MediaView = () => {
                   autoPlay
                   style={{
                     width: '100%',
-                    maxHeight: '80vh',
+                    height: '100%',
+                    maxHeight: 'inherit',
                     objectFit: 'contain',
                   }}
-                  src={media.url}
+                  src={getMediaUrl(media.url)}
                 >
                   Your browser does not support the video tag.
                 </video>
@@ -133,30 +143,32 @@ const MediaView = () => {
                   display: 'flex',
                   justifyContent: 'center',
                   bgcolor: 'grey.100',
-                  minHeight: '400px',
+                  minHeight: { xs: '200px', sm: '300px', md: '400px' },
+                  maxHeight: { xs: '50vh', sm: '70vh', md: '80vh' },
                   alignItems: 'center',
+                  p: { xs: 1, sm: 2 },
                 }}
               >
                 <img
-                  src={media.url}
+                  src={getMediaUrl(media.url)}
                   alt={media.name}
                   style={{
                     maxWidth: '100%',
-                    maxHeight: '80vh',
+                    maxHeight: '100%',
                     objectFit: 'contain',
                   }}
                 />
               </Box>
             )}
 
-            <Box sx={{ mt: 3 }}>
-              <Typography variant="body2" color="text.secondary">
+            <Box sx={{ mt: { xs: 2, sm: 3 }, display: 'flex', flexDirection: 'column', gap: { xs: 0.5, sm: 1 } }}>
+              <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
                 Category: <strong>{media.category.toUpperCase()}</strong>
               </Typography>
-              <Typography variant="body2" color="text.secondary">
+              <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
                 Size: <strong>{(media.size / (1024 * 1024)).toFixed(2)} MB</strong>
               </Typography>
-              <Typography variant="body2" color="text.secondary">
+              <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' }, wordBreak: 'break-word' }}>
                 Uploaded: <strong>{new Date(media.uploadDate).toLocaleString()}</strong>
               </Typography>
             </Box>

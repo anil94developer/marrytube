@@ -37,9 +37,9 @@ import {
   CreateNewFolder as CreateFolderIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
-import { uploadToS3 } from '../services/s3Service';
-import { saveMedia, getFolders, createFolder } from '../services/mediaService';
-import { getUserStorage, updateStorageUsage } from '../services/storageService';
+import { getUploadUrl, saveMedia, getFoldersForUser, createFolderForUser } from '../services/mediaService';
+import { getUserStorage } from '../services/storageService';
+import { formatStorageGB } from '../utils/storageFormat';
 
 const MediaUpload = () => {
   const { user } = useAuth();
@@ -64,7 +64,7 @@ const MediaUpload = () => {
 
   const loadFolders = async () => {
     try {
-      const folderList = await getFolders(user.id);
+      const folderList = await getFoldersForUser();
       setFolders(folderList);
     } catch (error) {
       console.error('Failed to load folders:', error);
@@ -82,12 +82,9 @@ const MediaUpload = () => {
     }
 
     try {
-      const newFolder = await createFolder({
-        userId: user.id,
-        name: createFolderDialog.name.trim(),
-      });
+      const newFolder = await createFolderForUser(createFolderDialog.name.trim());
       await loadFolders();
-      setSelectedFolder(newFolder.id);
+      if (newFolder && newFolder.id) setSelectedFolder(newFolder.id);
       setCreateFolderDialog({ open: false, name: '' });
       setSnackbar({
         open: true,
@@ -97,7 +94,7 @@ const MediaUpload = () => {
     } catch (error) {
       setSnackbar({
         open: true,
-        message: 'Failed to create folder',
+        message: error.response?.data?.message || 'Failed to create folder',
         severity: 'error',
       });
     }
@@ -121,7 +118,7 @@ const MediaUpload = () => {
       if (totalSize + fileSizeInGB > availableStorage) {
         setSnackbar({
           open: true,
-          message: `Cannot add more files. Available storage: ${availableStorage.toFixed(2)} GB`,
+          message: `Cannot add more files. Available storage: ${formatStorageGB(availableStorage)}`,
           severity: 'warning',
         });
         return;
@@ -170,38 +167,48 @@ const MediaUpload = () => {
     }
 
     setUploading(true);
+    let currentAvailable = availableStorage;
     const uploadPromises = files.map(async (fileItem) => {
       try {
         const fileSizeInGB = fileItem.file.size / (1024 * 1024 * 1024);
-        
-        if (fileSizeInGB > availableStorage) {
+        if (fileSizeInGB > currentAvailable) {
           return { id: fileItem.id, success: false, error: 'File size exceeds available storage' };
         }
 
-        const result = await uploadToS3(fileItem.file, (progress) => {
-          setUploadProgress((prev) => ({
-            ...prev,
-            [fileItem.id]: progress,
-          }));
+        const { uploadURL, s3Key, url } = await getUploadUrl(
+          fileItem.file.name,
+          fileItem.file.type,
+          fileItem.file.size
+        );
+
+        setUploadProgress((prev) => ({ ...prev, [fileItem.id]: 30 }));
+
+        const putRes = await fetch(uploadURL, {
+          method: 'PUT',
+          body: fileItem.file,
+          headers: { 'Content-Type': fileItem.file.type },
         });
+        if (!putRes.ok) {
+          throw new Error('Upload to storage failed');
+        }
+
+        setUploadProgress((prev) => ({ ...prev, [fileItem.id]: 80 }));
 
         await saveMedia({
-          userId: user.id,
           name: fileItem.file.name,
-          size: fileItem.file.size,
+          url,
+          s3Key,
           category: fileItem.category,
-          type: fileItem.file.type,
-          url: result.url,
-          key: result.key,
+          size: fileItem.file.size,
+          mimeType: fileItem.file.type,
           folderId: selectedFolder || null,
         });
 
-        await updateStorageUsage(user.id, fileSizeInGB);
-        await loadStorage();
-
+        currentAvailable -= fileSizeInGB;
+        setUploadProgress((prev) => ({ ...prev, [fileItem.id]: 100 }));
         return { id: fileItem.id, success: true };
       } catch (error) {
-        return { id: fileItem.id, success: false, error: error.message };
+        return { id: fileItem.id, success: false, error: error.response?.data?.message || error.message };
       }
     });
 
@@ -209,6 +216,7 @@ const MediaUpload = () => {
     const successCount = results.filter((r) => r.success).length;
     const failCount = results.length - successCount;
 
+    await loadStorage();
     setSnackbar({
       open: true,
       message: `${successCount} file(s) uploaded successfully${failCount > 0 ? `, ${failCount} failed` : ''}`,
@@ -229,10 +237,19 @@ const MediaUpload = () => {
   };
 
   return (
-    <Container maxWidth="lg">
+    <Container maxWidth="lg" sx={{ px: { xs: 1, sm: 2, md: 3 } }}>
       <Fade in timeout={600}>
         <Box>
-          <Typography variant="h4" component="h1" gutterBottom sx={{ fontWeight: 'bold', mb: 4 }}>
+          <Typography 
+            variant="h4" 
+            component="h1" 
+            gutterBottom 
+            sx={{ 
+              fontWeight: 'bold', 
+              mb: { xs: 2, sm: 3, md: 4 },
+              fontSize: { xs: '1.5rem', sm: '2rem', md: '2.5rem' }
+            }}
+          >
             Upload Media
           </Typography>
 
@@ -243,9 +260,9 @@ const MediaUpload = () => {
           )}
 
           {/* Folder Selection */}
-          <Paper elevation={2} sx={{ p: 2, mb: 3, borderRadius: 2 }}>
-            <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
-              <FormControl size="small" sx={{ minWidth: 200, flexGrow: 1 }}>
+          <Paper elevation={2} sx={{ p: { xs: 1.5, sm: 2 }, mb: { xs: 2, sm: 3 }, borderRadius: 2 }}>
+            <Box sx={{ display: 'flex', gap: { xs: 1, sm: 2 }, alignItems: 'center', flexWrap: 'wrap' }}>
+              <FormControl size="small" sx={{ minWidth: { xs: '100%', sm: 200 }, flexGrow: 1, width: { xs: '100%', sm: 'auto' } }}>
                 <InputLabel>Select Folder</InputLabel>
                 <Select
                   value={selectedFolder}
@@ -315,7 +332,7 @@ const MediaUpload = () => {
                 Supports: Video (MP4, AVI, MOV, MKV) and Images (JPG, PNG, GIF, WEBP)
               </Typography>
               <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
-                Available Storage: {availableStorage.toFixed(2)} GB
+                Available Storage: {formatStorageGB(availableStorage)}
               </Typography>
             </Box>
           </Paper>

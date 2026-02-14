@@ -21,19 +21,19 @@ import {
 import {
   Menu as MenuIcon,
   Dashboard as DashboardIcon,
+  People as PeopleIcon,
   CloudUpload as CloudUploadIcon,
-  Storage as StorageIcon,
-  VideoLibrary as VideoLibraryIcon,
-  HelpOutline as HelpIcon,
-  AccountCircle,
+  AccountBalanceWallet as WalletIcon,
+  AccountBalance as BankIcon,
   Logout,
+  Business as BusinessIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 import logo from '../assets/logo-icon.png';
 
 const drawerWidth = 240;
 
-const Layout = () => {
+const StudioLayout = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -43,11 +43,11 @@ const Layout = () => {
   const { user, logout } = useAuth();
 
   const menuItems = [
-    { text: 'Dashboard', icon: <DashboardIcon />, path: '/' },
-    // { text: 'Upload Media', icon: <CloudUploadIcon />, path: '/upload' },
-    { text: 'My Media', icon: <VideoLibraryIcon />, path: '/media' },
-    { text: 'Storage Plans', icon: <StorageIcon />, path: '/storage-plans' },
-    { text: 'How to use', icon: <HelpIcon />, path: '/how-to-use' },
+    { text: 'Dashboard', icon: <DashboardIcon />, path: '/studio/dashboard' },
+    { text: 'Clients', icon: <PeopleIcon />, path: '/studio/clients' },
+    // { text: 'Upload', icon: <CloudUploadIcon />, path: '/studio/upload' },
+    { text: 'Fund Requests', icon: <WalletIcon />, path: '/studio/fund-requests' },
+    { text: 'Bank Details', icon: <BankIcon />, path: '/studio/bank-details' },
   ];
 
   const handleDrawerToggle = () => {
@@ -64,7 +64,7 @@ const Layout = () => {
 
   const handleLogout = () => {
     logout();
-    navigate('/login');
+    navigate('/studio/login');
     handleMenuClose();
   };
 
@@ -89,7 +89,7 @@ const Layout = () => {
           }}
         />
         <Typography variant="h6" noWrap component="div" sx={{ fontWeight: 'bold' }}>
-          MarryTube
+          Studio Panel
         </Typography>
       </Toolbar>
       <List>
@@ -158,11 +158,11 @@ const Layout = () => {
             }}
           />
           <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
-            {menuItems.find((item) => item.path === location.pathname)?.text || 'MarryTube'}
+            {menuItems.find((item) => item.path === location.pathname)?.text || 'Studio Panel'}
           </Typography>
           <IconButton onClick={handleMenuClick} size="small">
             <Avatar sx={{ width: 32, height: 32, bgcolor: 'secondary.main' }}>
-              {user?.name?.charAt(0) || 'U'}
+              {user?.name?.charAt(0) || 'S'}
             </Avatar>
           </IconButton>
           <Menu
@@ -171,12 +171,6 @@ const Layout = () => {
             onClose={handleMenuClose}
             TransitionComponent={Fade}
           >
-            <MenuItem onClick={() => { navigate('/profile'); handleMenuClose(); }}>
-              <ListItemIcon>
-                <AccountCircle fontSize="small" />
-              </ListItemIcon>
-              <ListItemText>Profile</ListItemText>
-            </MenuItem>
             <MenuItem onClick={handleLogout}>
               <ListItemIcon>
                 <Logout fontSize="small" />
@@ -236,4 +230,5 @@ const Layout = () => {
   );
 };
 
-export default Layout;
+export default StudioLayout;
+

@@ -21,19 +21,23 @@ import {
 import {
   Menu as MenuIcon,
   Dashboard as DashboardIcon,
-  CloudUpload as CloudUploadIcon,
-  Storage as StorageIcon,
+  People as PeopleIcon,
   VideoLibrary as VideoLibraryIcon,
-  HelpOutline as HelpIcon,
-  AccountCircle,
+  Storage as StorageIcon,
+  AttachMoney as AttachMoneyIcon,
+  Business as BusinessIcon,
   Logout,
+  AdminPanelSettings as AdminIcon,
+  Settings as SettingsIcon,
+  Paid as CommissionIcon,
+  AccountBalanceWallet as WithdrawIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 import logo from '../assets/logo-icon.png';
 
 const drawerWidth = 240;
 
-const Layout = () => {
+const AdminLayout = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -43,11 +47,14 @@ const Layout = () => {
   const { user, logout } = useAuth();
 
   const menuItems = [
-    { text: 'Dashboard', icon: <DashboardIcon />, path: '/' },
-    // { text: 'Upload Media', icon: <CloudUploadIcon />, path: '/upload' },
-    { text: 'My Media', icon: <VideoLibraryIcon />, path: '/media' },
-    { text: 'Storage Plans', icon: <StorageIcon />, path: '/storage-plans' },
-    { text: 'How to use', icon: <HelpIcon />, path: '/how-to-use' },
+    { text: 'Dashboard', icon: <DashboardIcon />, path: '/admin/dashboard' },
+    { text: 'Users', icon: <PeopleIcon />, path: '/admin/users' },
+    { text: 'Studios', icon: <BusinessIcon />, path: '/admin/studios' },
+    { text: 'Withdraw Requests', icon: <WithdrawIcon />, path: '/admin/withdraw-requests' },
+    { text: 'Storage', icon: <StorageIcon />, path: '/admin/storage' },
+    { text: 'Plans', icon: <AttachMoneyIcon />, path: '/admin/plans' },
+    { text: 'Commission', icon: <CommissionIcon />, path: '/admin/commission' },
+    { text: 'Settings', icon: <SettingsIcon />, path: '/admin/settings' },
   ];
 
   const handleDrawerToggle = () => {
@@ -64,7 +71,7 @@ const Layout = () => {
 
   const handleLogout = () => {
     logout();
-    navigate('/login');
+    navigate('/admin/login');
     handleMenuClose();
   };
 
@@ -89,7 +96,7 @@ const Layout = () => {
           }}
         />
         <Typography variant="h6" noWrap component="div" sx={{ fontWeight: 'bold' }}>
-          MarryTube
+          Admin Panel
         </Typography>
       </Toolbar>
       <List>
@@ -101,7 +108,7 @@ const Layout = () => {
               navigate(item.path);
               if (isMobile) setMobileOpen(false);
             }}
-            selected={location.pathname === item.path}
+            selected={location.pathname === item.path || (item.path !== '/admin/dashboard' && location.pathname.startsWith(item.path + '/'))}
             sx={{
               '&.Mui-selected': {
                 backgroundColor: 'primary.main',
@@ -158,11 +165,11 @@ const Layout = () => {
             }}
           />
           <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
-            {menuItems.find((item) => item.path === location.pathname)?.text || 'MarryTube'}
+            {menuItems.find((item) => item.path === location.pathname)?.text || 'Admin Panel'}
           </Typography>
           <IconButton onClick={handleMenuClick} size="small">
             <Avatar sx={{ width: 32, height: 32, bgcolor: 'secondary.main' }}>
-              {user?.name?.charAt(0) || 'U'}
+              {user?.name?.charAt(0) || 'A'}
             </Avatar>
           </IconButton>
           <Menu
@@ -171,12 +178,6 @@ const Layout = () => {
             onClose={handleMenuClose}
             TransitionComponent={Fade}
           >
-            <MenuItem onClick={() => { navigate('/profile'); handleMenuClose(); }}>
-              <ListItemIcon>
-                <AccountCircle fontSize="small" />
-              </ListItemIcon>
-              <ListItemText>Profile</ListItemText>
-            </MenuItem>
             <MenuItem onClick={handleLogout}>
               <ListItemIcon>
                 <Logout fontSize="small" />
@@ -236,4 +237,5 @@ const Layout = () => {
   );
 };
 
-export default Layout;
+export default AdminLayout;
+

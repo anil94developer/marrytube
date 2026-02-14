@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Container,
@@ -14,9 +14,10 @@ import {
   Fade,
   Slide,
 } from '@mui/material';
-import { Phone, Email, Lock } from '@mui/icons-material';
+import { Phone, Email, Lock, Refresh } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 import { sendOTP, verifyOTP } from '../services/authService';
+import logo from '../assets/logo-icon.png';
 
 const Login = () => {
   const [tabValue, setTabValue] = useState(0);
@@ -25,8 +26,40 @@ const Login = () => {
   const [step, setStep] = useState('identifier'); // 'identifier' or 'otp'
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [timer, setTimer] = useState(0); // Timer in seconds
+  const [resendLoading, setResendLoading] = useState(false);
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, user, loading: authLoading } = useAuth();
+
+  // Redirect if already logged in
+  useEffect(() => {
+    if (!authLoading && user && user.userType === 'customer') {
+      navigate('/', { replace: true });
+    }
+  }, [user, authLoading, navigate]);
+
+  // OTP Timer countdown
+  useEffect(() => {
+    let interval = null;
+    if (timer > 0) {
+      interval = setInterval(() => {
+        setTimer((prevTimer) => prevTimer - 1);
+      }, 1000);
+    } else {
+      clearInterval(interval);
+    }
+    return () => clearInterval(interval);
+  }, [timer]);
+
+  // Show loading while checking auth
+  if (authLoading) {
+    return (
+      <Container maxWidth="sm" sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <CircularProgress />
+      </Container>
+    );
+  }
 
   const handleTabChange = (event, newValue) => {
     setTabValue(newValue);
@@ -34,6 +67,8 @@ const Login = () => {
     setOtp('');
     setStep('identifier');
     setError('');
+    setSuccess('');
+    setTimer(0);
   };
 
   const handleSendOTP = async () => {
@@ -49,11 +84,40 @@ const Login = () => {
       const type = tabValue === 0 ? 'mobile' : 'email';
       await sendOTP(identifier, type);
       setStep('otp');
+      setTimer(60); // Start 60 second timer
     } catch (err) {
       setError(err.message || 'Failed to send OTP');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleResendOTP = async () => {
+    if (!identifier) {
+      setError('Please enter your ' + (tabValue === 0 ? 'mobile number' : 'email'));
+      return;
+    }
+
+    setResendLoading(true);
+    setError('');
+
+    try {
+      const type = tabValue === 0 ? 'mobile' : 'email';
+      await sendOTP(identifier, type);
+      setTimer(60); // Reset timer to 60 seconds
+      setSuccess('OTP sent successfully!');
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err) {
+      setError(err.message || 'Failed to resend OTP');
+    } finally {
+      setResendLoading(false);
+    }
+  };
+
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
   const handleVerifyOTP = async () => {
@@ -64,23 +128,36 @@ const Login = () => {
 
     setLoading(true);
     setError('');
+    setSuccess('');
 
     try {
       const type = tabValue === 0 ? 'mobile' : 'email';
-      const result = await verifyOTP(identifier, otp, type);
+      const result = await verifyOTP(identifier, otp, type, 'customer');
       if (result.success) {
-        login(result.user);
-        navigate('/');
+        // Show success message
+        if (result.isNewUser) {
+          setSuccess('Account created successfully! Redirecting...');
+        } else {
+          setSuccess('Login successful! Redirecting...');
+        }
+        
+        // Login user
+        login(result.user, result.token);
+        
+        // Navigate to home page (Dashboard) after a brief delay
+        setTimeout(() => {
+          navigate('/', { replace: true });
+        }, 1000);
       }
     } catch (err) {
-      setError(err.message || 'Invalid OTP. Try 123456 for demo');
+      setError(err.message || 'Invalid OTP');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <Container maxWidth="sm" sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', py: 4 }}>
+    <Container maxWidth="sm" sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', py: { xs: 2, sm: 4 }, px: { xs: 1, sm: 2 } }}>
       <Fade in timeout={800}>
         <Paper
           elevation={8}
@@ -93,12 +170,40 @@ const Login = () => {
           }}
         >
           <Box sx={{ textAlign: 'center', mb: 4 }}>
+            <Box
+              component="img"
+              src={logo}
+              alt="MarryTube Logo"
+              sx={{
+                height: { xs: 60, sm: 80 },
+                width: 'auto',
+                mb: 2,
+              }}
+            />
             <Typography variant="h4" component="h1" gutterBottom sx={{ fontWeight: 'bold' }}>
               Welcome to MarryTube
             </Typography>
-            <Typography variant="body2" sx={{ opacity: 0.9 }}>
-              Login with OTP to continue
+            <Typography variant="body2" sx={{ opacity: 0.9, mb: 2 }}>
+              Customer Login with OTP
             </Typography>
+            <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={() => window.location.href = '/admin/login'}
+                sx={{ color: 'white', borderColor: 'white', '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.1)' } }}
+              >
+                Admin Login
+              </Button>
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={() => window.location.href = '/studio/login'}
+                sx={{ color: 'white', borderColor: 'white', '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.1)' } }}
+              >
+                Studio Login
+              </Button>
+            </Box>
           </Box>
 
           <Paper sx={{ p: 3, bgcolor: 'white', color: 'text.primary' }}>
@@ -116,6 +221,14 @@ const Login = () => {
               <Slide direction="down" in={Boolean(error)}>
                 <Alert severity="error" sx={{ mb: 2 }}>
                   {error}
+                </Alert>
+              </Slide>
+            )}
+
+            {success && (
+              <Slide direction="down" in={Boolean(success)}>
+                <Alert severity="success" sx={{ mb: 2 }}>
+                  {success}
                 </Alert>
               </Slide>
             )}
@@ -158,6 +271,31 @@ const Login = () => {
                     startAdornment: <Lock sx={{ mr: 1, color: 'text.secondary' }} />,
                   }}
                 />
+                
+                {/* Timer and Resend OTP */}
+                <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  {timer > 0 ? (
+                    <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.875rem' }}>
+                      Resend OTP in: <strong style={{ color: '#667eea' }}>{formatTime(timer)}</strong>
+                    </Typography>
+                  ) : (
+                    <Button
+                      variant="text"
+                      size="small"
+                      startIcon={<Refresh />}
+                      onClick={handleResendOTP}
+                      disabled={resendLoading}
+                      sx={{ 
+                        color: '#667eea',
+                        textTransform: 'none',
+                        '&:hover': { bgcolor: 'rgba(102, 126, 234, 0.1)' }
+                      }}
+                    >
+                      {resendLoading ? <CircularProgress size={16} /> : 'Resend OTP'}
+                    </Button>
+                  )}
+                </Box>
+
                 <Button
                   fullWidth
                   variant="outlined"
@@ -166,6 +304,7 @@ const Login = () => {
                     setStep('identifier');
                     setOtp('');
                     setError('');
+                    setTimer(0);
                   }}
                   sx={{ mb: 2 }}
                   disabled={loading}

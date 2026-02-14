@@ -1,0 +1,18 @@
+/login → Customer login
+/admin/login → Admin login
+/admin/dashboard → Admin dashboard
+/admin/users → All users
+/admin/media → All media
+/admin/storage → Storage monitoring
+/admin/plans → Plans management
+
+/studio/login → Studio login
+/studio/dashboard → Studio dashboard
+/studio/clients → Client management
+/studio/clients/:id → Client details
+/studio/upload → Upload for clients
+/studio/fund-requests → Fund requests
+
+/ → Customer dashboard
+/upload → Customer upload
+/media → Customer media list

@@ -127,11 +127,18 @@ const Profile = () => {
   };
 
   return (
-    <Container maxWidth="md">
+    <Container maxWidth="md" sx={{ px: { xs: 1, sm: 2, md: 3 } }}>
       <Fade in timeout={600}>
         <Box>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
-            <Typography variant="h4" component="h1" sx={{ fontWeight: 'bold' }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: { xs: 2, sm: 3, md: 4 }, flexWrap: 'wrap', gap: 2 }}>
+            <Typography 
+              variant="h4" 
+              component="h1" 
+              sx={{ 
+                fontWeight: 'bold',
+                fontSize: { xs: '1.5rem', sm: '2rem', md: '2.5rem' }
+              }}
+            >
               Profile
             </Typography>
             {!editMode ? (
@@ -195,7 +202,7 @@ const Profile = () => {
               </Grid>
 
               <Grid item xs={12}>
-                <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start' }}>
+                <Box sx={{ display: 'flex', gap: { xs: 1, sm: 2 }, alignItems: 'flex-start', flexWrap: 'wrap' }}>
                   <TextField
                     fullWidth
                     label="Phone Number"
@@ -204,6 +211,7 @@ const Profile = () => {
                     onChange={handleInputChange('mobile')}
                     disabled={!editMode}
                     variant={editMode ? 'outlined' : 'filled'}
+                    sx={{ flexGrow: 1, minWidth: { xs: '100%', sm: 200 } }}
                     InputProps={{
                       startAdornment: <PhoneIcon sx={{ mr: 1, color: 'text.secondary' }} />,
                     }}
@@ -212,7 +220,7 @@ const Profile = () => {
                     <Button
                       variant="outlined"
                       onClick={handleChangePhoneClick}
-                      sx={{ mt: 1 }}
+                      sx={{ mt: { xs: 0, sm: 1 }, width: { xs: '100%', sm: 'auto' } }}
                     >
                       Change
                     </Button>
@@ -243,6 +251,12 @@ const Profile = () => {
         TransitionComponent={Fade}
         maxWidth="sm"
         fullWidth
+        sx={{
+          '& .MuiDialog-paper': {
+            m: { xs: 1, sm: 2 },
+            width: { xs: 'calc(100% - 16px)', sm: 'auto' },
+          },
+        }}
       >
         <DialogTitle>Change Phone Number</DialogTitle>
         <DialogContent>

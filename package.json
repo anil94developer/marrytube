@@ -20,8 +20,11 @@
     "web-vitals": "^3.5.0"
   },
   "scripts": {
-    "start": "DISABLE_ESLINT_PLUGIN=true react-scripts start",
-    "build": "react-scripts build",
+    "prestart": "mkdir -p $HOME/.eslintcache || true",
+    "prebuild": "mkdir -p $HOME/.eslintcache || true",
+    "start": "ESLINT_CACHE=$HOME/.eslintcache react-scripts start",
+    "dev": "ESLINT_CACHE=$HOME/.eslintcache react-scripts start",
+    "build": "ESLINT_CACHE=$HOME/.eslintcache react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
   },

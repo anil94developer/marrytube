@@ -1,103 +1,139 @@
-// Media service - Replace with actual backend API calls
-export const getMediaList = async (userId, category = null, folderId = null) => {
-  // Mock media list - Replace with actual API call
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      const media = JSON.parse(localStorage.getItem('userMedia') || '[]');
-      let filteredMedia = media.filter(m => m.userId === userId);
-      
-      if (category) {
-        filteredMedia = filteredMedia.filter(m => m.category === category);
-      }
-      
-      if (folderId) {
-        filteredMedia = filteredMedia.filter(m => m.folderId === folderId);
-      } else if (folderId === '') {
-        // Show only items without folder (root level)
-        filteredMedia = filteredMedia.filter(m => !m.folderId || m.folderId === '');
-      }
-      
-      // Sort by upload date (newest first)
-      filteredMedia.sort((a, b) => new Date(b.uploadDate) - new Date(a.uploadDate));
-      
-      resolve(filteredMedia);
-    }, 500);
+import axios from 'axios';
+import API_BASE_URL from '../config/api';
+
+axios.defaults.baseURL = axios.defaults.baseURL || API_BASE_URL;
+
+// —— Studio (client) APIs ——
+
+export const uploadMediaForClient = async (clientId, { file, userPlanId, folderId }) => {
+  const formData = new FormData();
+  formData.append('media', file);
+  if (userPlanId) formData.append('userPlanId', userPlanId);
+  if (folderId) formData.append('folderId', folderId);
+  const response = await axios.post(`/studio/clients/${clientId}/uploadMedia`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
   });
+  return response.data;
 };
 
-export const saveMedia = async (mediaData) => {
-  // Save to localStorage (in production, save to backend)
-  const existingMedia = JSON.parse(localStorage.getItem('userMedia') || '[]');
-  const newMedia = {
-    id: Date.now().toString(),
-    ...mediaData,
-    uploadDate: new Date().toISOString(),
-  };
-  existingMedia.push(newMedia);
-  localStorage.setItem('userMedia', JSON.stringify(existingMedia));
-  return newMedia;
+export const getFolders = async (clientId, userPlanId) => {
+  try {
+    const response = await axios.get(`/studio/clients/getFolders`, {
+      params: { userPlanId, clientId },
+    });
+    if (response.data && response.data.success) {
+      return response.data.folders;
+    }
+    return [];
+  } catch (error) {
+    console.error('Failed to fetch folders:', error);
+    return [];
+  }
 };
 
-export const deleteMedia = async (mediaId) => {
-  // Delete from localStorage (in production, delete from backend)
-  const existingMedia = JSON.parse(localStorage.getItem('userMedia') || '[]');
-  const filteredMedia = existingMedia.filter((m) => m.id !== mediaId);
-  localStorage.setItem('userMedia', JSON.stringify(filteredMedia));
-  return { success: true };
+export const createFolder = async ({ clientId, name, userPlanId }) => {
+  const res = await axios.post(`/studio/clients/${clientId}/folders`, {
+    name,
+    userPlanId: userPlanId || null,
+  });
+  return res.data.folder;
 };
 
+// —— Customer (user) APIs ——
+
+/** Get folders for logged-in user */
+export const getFoldersForUser = async () => {
+  try {
+    const res = await axios.get('/media/folders/list');
+    return Array.isArray(res.data) ? res.data : [];
+  } catch (error) {
+    console.error('Failed to fetch folders:', error);
+    return [];
+  }
+};
+
+/** Create folder for logged-in user (user panel). Same as studio: { name, planId }. planId = drive card id. */
+export const createFolderForUser = async (name, planId = null) => {
+  const folderName = typeof name === 'string' ? name.trim() : '';
+  if (!folderName) throw new Error('Folder name is required');
+  const body = { name: folderName, userPlanId: (planId && planId !== 'default') ? planId : null };
+  const res = await axios.post('/media/folders', body);
+  return res.data;
+};
+
+/** Get media list for logged-in user. category, folderId, userPlanId ('default' or plan id) */
+export const getMediaList = async (userId, category = null, folderId = null, userPlanId = null) => {
+  try {
+    const params = {};
+    if (category) params.category = category;
+    if (folderId !== undefined && folderId !== null) params.folderId = folderId;
+    if (userPlanId !== undefined && userPlanId !== null) params.userPlanId = userPlanId;
+    const res = await axios.get('/media/list', { params });
+    return Array.isArray(res.data) ? res.data : [];
+  } catch (error) {
+    console.error('Failed to fetch media list:', error);
+    return [];
+  }
+};
+
+/** Get single media by ID (logged-in user's media) */
 export const getMediaById = async (mediaId) => {
-  const media = JSON.parse(localStorage.getItem('userMedia') || '[]');
-  return media.find(m => m.id === mediaId) || null;
+  try {
+    const res = await axios.get(`/media/${mediaId}`);
+    return res.data || null;
+  } catch (error) {
+    console.error('Failed to fetch media:', error);
+    return null;
+  }
 };
 
-// Folder management functions
-export const getFolders = async (userId) => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      const folders = JSON.parse(localStorage.getItem('userFolders') || '[]');
-      const userFolders = folders.filter(f => f.userId === userId);
-      // Sort by creation date (newest first)
-      userFolders.sort((a, b) => new Date(b.createdDate) - new Date(a.createdDate));
-      resolve(userFolders);
-    }, 300);
-  });
+/** Delete media (logged-in user's media) */
+export const deleteMedia = async (mediaId) => {
+  const res = await axios.delete(`/media/${mediaId}`);
+  return res.data || { success: true };
 };
 
-export const createFolder = async (folderData) => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      const folders = JSON.parse(localStorage.getItem('userFolders') || '[]');
-      const newFolder = {
-        id: Date.now().toString(),
-        ...folderData,
-        createdDate: new Date().toISOString(),
-      };
-      folders.push(newFolder);
-      localStorage.setItem('userFolders', JSON.stringify(folders));
-      resolve(newFolder);
-    }, 300);
+/** Direct multipart upload (logged-in user). FormData: media, userPlanId, folderId. */
+export const uploadMediaForUser = async ({ file, userPlanId, folderId }) => {
+  const formData = new FormData();
+  formData.append('media', file);
+  if (userPlanId !== undefined && userPlanId !== null) formData.append('userPlanId', userPlanId);
+  if (folderId !== undefined && folderId !== null) formData.append('folderId', folderId);
+  const res = await axios.post('/media/upload', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
   });
+  return res.data;
+};
+
+/** Get presigned upload URL (logged-in user). Optional userPlanId: 'default' or plan id. */
+export const getUploadUrl = async (fileName, mimeType, size, userPlanId = null) => {
+  const body = { fileName, mimeType, size: Number(size) };
+  if (userPlanId !== undefined && userPlanId !== null) body.userPlanId = userPlanId;
+  const res = await axios.post('/media/upload-url', body);
+  const data = res.data || {};
+  return {
+    uploadURL: data.uploadURL,
+    s3Key: data.s3Key,
+    url: data.url,
+  };
+};
+
+/** Save media record after upload (logged-in user). Optional userPlanId: 'default' or plan id. */
+export const saveMedia = async (mediaData) => {
+  const res = await axios.post('/media/save', {
+    name: mediaData.name,
+    url: mediaData.url,
+    s3Key: mediaData.s3Key,
+    category: mediaData.category || (mediaData.type?.startsWith('video/') ? 'video' : 'image'),
+    size: mediaData.size,
+    mimeType: mediaData.mimeType || mediaData.type,
+    folderId: mediaData.folderId || null,
+    userPlanId: mediaData.userPlanId ?? null,
+  });
+  return res.data;
 };
 
 export const deleteFolder = async (folderId) => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      const folders = JSON.parse(localStorage.getItem('userFolders') || '[]');
-      const filteredFolders = folders.filter(f => f.id !== folderId);
-      localStorage.setItem('userFolders', JSON.stringify(filteredFolders));
-      
-      // Also remove folderId from media items in this folder
-      const media = JSON.parse(localStorage.getItem('userMedia') || '[]');
-      const updatedMedia = media.map(m => {
-        if (m.folderId === folderId) {
-          return { ...m, folderId: null };
-        }
-        return m;
-      });
-      localStorage.setItem('userMedia', JSON.stringify(updatedMedia));
-      
-      resolve({ success: true });
-    }, 300);
-  });
+  const res = await axios.delete(`/media/folders/${folderId}`);
+  return res.data;
 };
