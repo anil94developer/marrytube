@@ -120,4 +120,3 @@ export const saveBankDetails = async (data) => {
   const res = await axios.put('/studio/bank-details', data);
   return res.data;
 };
-

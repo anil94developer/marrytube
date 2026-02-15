@@ -64,6 +64,7 @@ import { BarChart } from '@mui/x-charts/BarChart';
 import { PieChart } from '@mui/x-charts/PieChart';
 import { getClientDetails, purchaseSpaceForClient, getStoragePlans as fetchStoragePlans, purchasePlanForClient, getUserPlans, moveMediaBetweenPlans } from '../../services/studioService';
 import { formatStorageWithUnits, formatStorageGB } from '../../utils/storageFormat';
+import { getMediaUrl } from '../../config/api';
 import StudioUpload from './StudioUpload';
 
 const StudioClientDetails = () => {
@@ -96,6 +97,7 @@ const StudioClientDetails = () => {
   const [moveLoading, setMoveLoading] = useState(false);
   const [moveSelectedIds, setMoveSelectedIds] = useState([]);
   const [moveFilter, setMoveFilter] = useState('all'); // 'all' | 'video' | 'image' - follows tabValue when dialog opens
+  const [previewMedia, setPreviewMedia] = useState(null);
 
   const BYTES_PER_GB = 1024 * 1024 * 1024;
   const EXPIRY_NEAR_DAYS = 10;
@@ -299,45 +301,89 @@ const StudioClientDetails = () => {
 
 
           {/* User Purchased Plans List - Improved UI */}
-          <Paper elevation={4} sx={{ mb: 3, p: 2, borderRadius: 3 }}>
-            <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2 }}>Purchased Plans</Typography>
+          <Paper
+            elevation={0}
+            sx={{
+              mb: 3,
+              p: 2.5,
+              borderRadius: 3,
+              border: '1px solid',
+              borderColor: 'rgba(0,0,0,0.08)',
+              bgcolor: 'rgba(213, 208, 208, 0.95)',
+              boxShadow: '0 4px 20px rgba(0,0,0,0.06)',
+            }}
+          >
+            <Typography variant="h6" sx={{ fontWeight: 700, mb: 2, color: '#2d2d2d' }}>Purchased Plans</Typography>
             {userPlans.length === 0 ? (
               <Typography variant="body2" color="text.secondary">No plans purchased yet.</Typography>
             ) : (
               <Grid container spacing={2}>
                 {userPlans.map((plan) => (
                   <Grid item xs={12} sm={6} md={4} key={plan.id}>
-                    <Card elevation={3} sx={{ borderRadius: 3, bgcolor: 'grey.50', display: 'flex', flexDirection: 'column', height: '100%' }}>
+                    <Card
+                      elevation={0}
+                      sx={{
+                        borderRadius: 2,
+                        border: '1px solid',
+                        borderColor: 'divider',
+                        bgcolor: '#fff',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        height: '100%',
+                        overflow: 'hidden',
+                        transition: 'box-shadow 0.2s, border-color 0.2s',
+                        '&:hover': {
+                          boxShadow: '0 8px 24px rgba(196, 92, 92, 0.15)',
+                          borderColor: 'primary.main',
+                        },
+                      }}
+                    >
                       <CardActionArea
                         onClick={() => navigate(`/studio/clients/${id}/drive/${plan.id}`)}
-                        sx={{ flexGrow: 1, display: 'block', '&:hover': { bgcolor: 'action.hover' } }}
+                        sx={{
+                          flexGrow: 1,
+                          display: 'block',
+                          '&:hover': { bgcolor: 'rgba(196, 92, 92, 0.04)' },
+                        }}
                       >
                         <CardContent sx={{ flexGrow: 1 }}>
-                          <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                            <StorageIcon sx={{ fontSize: 32, mr: 1, color: 'primary.main' }} />
-                            <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
-                              Plan {plan.totalStorage} GB
-                            </Typography>
-                            <ViewDriveIcon sx={{ ml: 0.5, fontSize: 18, color: 'text.secondary' }} />
+                          <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5 }}>
+                            <Box
+                              sx={{
+                                width: 44,
+                                height: 44,
+                                borderRadius: 2,
+                                bgcolor: 'rgba(196, 92, 92, 0.12)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                mr: 1.5,
+                              }}
+                            >
+                              <StorageIcon sx={{ fontSize: 26, color: 'primary.main' }} />
+                            </Box>
+                            <Box sx={{ flex: 1, minWidth: 0 }}>
+                              <Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#2d2d2d' }}>
+                                Plan {plan.totalStorage} GB
+                              </Typography>
+                              <Typography variant="caption" color="text.secondary">Click to open drive</Typography>
+                            </Box>
+                            <ViewDriveIcon sx={{ fontSize: 20, color: 'primary.main', opacity: 0.8 }} />
                           </Box>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 1 }}>
-                            <Chip icon={<CalendarIcon />} label={`Purchase: ${plan.createdAt ? new Date(plan.createdAt).toLocaleDateString() : '–'}`} size="small" variant="outlined" />
-                            <Chip icon={<CalendarIcon />} label={`Expiry: ${new Date(plan.expiryDate).toLocaleDateString()}`} size="small" />
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap', mb: 1.5 }}>
+                            <Chip icon={<CalendarIcon />} label={`Exp: ${new Date(plan.expiryDate).toLocaleDateString()}`} size="small" variant="outlined" sx={{ borderColor: 'divider' }} />
                             <Chip label={plan.status} color={plan.status === 'active' ? 'success' : 'default'} size="small" />
                           </Box>
-                          <Box sx={{ mt: 1 }}>
+                          <Box sx={{ mt: 1, p: 1.25, bgcolor: 'rgba(0,0,0,0.03)', borderRadius: 1 }}>
                             {(() => {
                               const fmt = formatStorageWithUnits(plan.totalStorage, plan.usedStorage, { usedIsBytes: true });
                               return (
                                 <>
                                   <Typography variant="body2" color="text.secondary">
-                                    <strong>Total:</strong> {fmt.totalFormatted}
+                                    <strong>Total:</strong> {fmt.totalFormatted} &nbsp;·&nbsp; <strong>Used:</strong> {fmt.usedFormatted}
                                   </Typography>
-                                  <Typography variant="body2" color="text.secondary">
-                                    <strong>Used:</strong> {fmt.usedFormatted}
-                                  </Typography>
-                                  <Typography variant="body2" color="text.secondary">
-                                    <strong>Available:</strong> {fmt.availableFormatted}
+                                  <Typography variant="body2" sx={{ color: 'primary.dark', fontWeight: 600 }}>
+                                    Available: {fmt.availableFormatted}
                                   </Typography>
                                 </>
                               );
@@ -345,7 +391,7 @@ const StudioClientDetails = () => {
                           </Box>
                         </CardContent>
                       </CardActionArea>
-                      <Box sx={{ p: 2, pt: 0, display: 'flex', flexDirection: 'column', gap: 1, alignItems: 'flex-end' }}>
+                      <Box sx={{ p: 1.5, pt: 1, borderTop: '1px solid', borderColor: 'divider', display: 'flex', flexDirection: 'column', gap: 1, alignItems: 'flex-end', bgcolor: 'rgba(0,0,0,0.02)' }}>
                         {(() => {
                           const availableGB = Number(plan.totalStorage) - (Number(plan.usedStorage) / BYTES_PER_GB);
                           const noSpace = availableGB <= 0;
@@ -837,7 +883,7 @@ const StudioClientDetails = () => {
                     {media.map((item, index) => (
                       <Grid item xs={12} sm={6} md={4} lg={3} key={item.id}>
                         <Grow in timeout={300 + index * 100}>
-                          <Card>
+                          <Card sx={{ cursor: 'pointer' }} onClick={() => setPreviewMedia(item)}>
                             <CardContent>
                               {item.category === 'video' ? (
                                 <VideoLibraryIcon sx={{ fontSize: 60, color: 'primary.main' }} />
@@ -866,7 +912,7 @@ const StudioClientDetails = () => {
                         </ListItemIcon>
                         <ListItemText primary={item.name} secondary={new Date(item.uploadDate).toLocaleString()} />
                         <ListItemSecondaryAction>
-                          <IconButton onClick={() => navigate(`/media/${item.id}`)}>
+                          <IconButton onClick={() => setPreviewMedia(item)}>
                             {item.category === 'video' ? <PlayIcon /> : <ViewIcon />}
                           </IconButton>
                         </ListItemSecondaryAction>
@@ -879,6 +925,41 @@ const StudioClientDetails = () => {
           </Paper>
         </Box>
       </Fade>
+
+      <Dialog
+        open={Boolean(previewMedia)}
+        onClose={() => setPreviewMedia(null)}
+        maxWidth={previewMedia?.category === 'video' ? 'md' : 'sm'}
+        fullWidth
+        PaperProps={{ sx: { borderRadius: 2 } }}
+      >
+        <DialogTitle sx={{ pb: 0 }}>{previewMedia?.name}</DialogTitle>
+        <DialogContent sx={{ pt: 1, overflow: 'hidden' }}>
+          {previewMedia && (
+            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', bgcolor: '#000', borderRadius: 1, overflow: 'hidden' }}>
+              {previewMedia.category === 'video' ? (
+                <video
+                  controls
+                  autoPlay
+                  style={{ maxWidth: '100%', maxHeight: '70vh' }}
+                  src={getMediaUrl(previewMedia.url)}
+                >
+                  Your browser does not support the video tag.
+                </video>
+              ) : (
+                <img
+                  alt={previewMedia.name}
+                  src={getMediaUrl(previewMedia.url)}
+                  style={{ maxWidth: '100%', maxHeight: '70vh', objectFit: 'contain' }}
+                />
+              )}
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPreviewMedia(null)}>Close</Button>
+        </DialogActions>
+      </Dialog>
 
       <Dialog
         open={purchaseDialog.open}

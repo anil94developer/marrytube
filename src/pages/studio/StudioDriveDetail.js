@@ -55,6 +55,7 @@ import {
 } from '@mui/icons-material';
 import { getClientDetails, getUserPlans, deleteClientMedia } from '../../services/studioService';
 import { formatStorageWithUnits, formatStorageGB } from '../../utils/storageFormat';
+import { getMediaUrl } from '../../config/api';
 
 const DATE_FILTERS = [
   { value: 'all', label: 'All Time' },
@@ -86,6 +87,7 @@ const StudioDriveDetail = () => {
   const [page, setPage] = useState(0);
   const [selectedIds, setSelectedIds] = useState([]);
   const [deleteDialog, setDeleteDialog] = useState({ open: false, mediaId: null, ids: [], name: '' });
+  const [previewMedia, setPreviewMedia] = useState(null);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
   useEffect(() => {
@@ -374,7 +376,7 @@ const StudioDriveDetail = () => {
                         sx={{ borderBottom: 1, borderColor: 'divider' }}
                         secondaryAction={
                           <Box>
-                            <IconButton edge="end" onClick={() => navigate(`/media/${item.id}`)}>
+                            <IconButton edge="end" onClick={() => setPreviewMedia(item)}>
                               {item.category === 'video' ? <PlayIcon /> : <ViewIcon />}
                             </IconButton>
                             <IconButton edge="end" onClick={(e) => { e.stopPropagation(); setDeleteDialog({ open: true, mediaId: item.id, ids: [item.id], name: item.name }); }}>
@@ -403,7 +405,7 @@ const StudioDriveDetail = () => {
                               {(item.size / (1024 * 1024)).toFixed(2)} MB • {new Date(item.uploadDate || item.createdAt).toLocaleString()}
                             </>
                           }
-                          onClick={() => navigate(`/media/${item.id}`)}
+                          onClick={() => setPreviewMedia(item)}
                           sx={{ cursor: 'pointer' }}
                         />
                       </ListItem>
@@ -436,7 +438,7 @@ const StudioDriveDetail = () => {
                           </Box>
                           <CardActionArea
                             sx={{ height: '100%', p: 2 }}
-                            onClick={() => navigate(`/media/${item.id}`)}
+                            onClick={() => setPreviewMedia(item)}
                           >
                             <CardContent sx={{ textAlign: 'center', p: 2, pt: 4 }}>
                               {item.category === 'video' ? (
@@ -481,6 +483,41 @@ const StudioDriveDetail = () => {
           </Paper>
         </Box>
       </Fade>
+
+      <Dialog
+        open={Boolean(previewMedia)}
+        onClose={() => setPreviewMedia(null)}
+        maxWidth={previewMedia?.category === 'video' ? 'md' : 'sm'}
+        fullWidth
+        PaperProps={{ sx: { borderRadius: 2 } }}
+      >
+        <DialogTitle sx={{ pb: 0 }}>{previewMedia?.name}</DialogTitle>
+        <DialogContent sx={{ pt: 1, overflow: 'hidden' }}>
+          {previewMedia && (
+            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', bgcolor: '#000', borderRadius: 1, overflow: 'hidden' }}>
+              {previewMedia.category === 'video' ? (
+                <video
+                  controls
+                  autoPlay
+                  style={{ maxWidth: '100%', maxHeight: '70vh' }}
+                  src={getMediaUrl(previewMedia.url)}
+                >
+                  Your browser does not support the video tag.
+                </video>
+              ) : (
+                <img
+                  alt={previewMedia.name}
+                  src={getMediaUrl(previewMedia.url)}
+                  style={{ maxWidth: '100%', maxHeight: '70vh', objectFit: 'contain' }}
+                />
+              )}
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPreviewMedia(null)}>Close</Button>
+        </DialogActions>
+      </Dialog>
 
       <Dialog open={deleteDialog.open} onClose={() => setDeleteDialog({ open: false, mediaId: null, ids: [], name: '' })}>
         <DialogTitle>Delete media?</DialogTitle>

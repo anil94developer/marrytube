@@ -17,7 +17,10 @@ import {
 import { Phone, Email, Lock, Refresh } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 import { sendOTP, verifyOTP } from '../services/authService';
-import logo from '../assets/logo-icon.png';
+import logo from '../assets/logo_512.png';
+
+const accent = '#c45c5c';
+const bgGradient = 'linear-gradient(165deg, #fdf8f6 0%, #f5ebe6 50%, #ede4df 100%)';
 
 const Login = () => {
   const [tabValue, setTabValue] = useState(0);
@@ -157,69 +160,92 @@ const Login = () => {
   };
 
   return (
-    <Container maxWidth="sm" sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', py: { xs: 2, sm: 4 }, px: { xs: 1, sm: 2 } }}>
-      <Fade in timeout={800}>
-        <Paper
-          elevation={8}
-          sx={{
-            p: { xs: 3, sm: 4 },
-            width: '100%',
-            borderRadius: 3,
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-            color: 'white',
-          }}
-        >
-          <Box sx={{ textAlign: 'center', mb: 4 }}>
-            <Box
-              component="img"
-              src={logo}
-              alt="MarryTube Logo"
-              sx={{
-                height: { xs: 60, sm: 80 },
-                width: 'auto',
-                mb: 2,
-              }}
-            />
-            <Typography variant="h4" component="h1" gutterBottom sx={{ fontWeight: 'bold' }}>
-              Welcome to MarryTube
-            </Typography>
-            <Typography variant="body2" sx={{ opacity: 0.9, mb: 2 }}>
-              Customer Login with OTP
-            </Typography>
-            <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
-              <Button
-                variant="outlined"
-                size="small"
-                onClick={() => window.location.href = '/admin/login'}
-                sx={{ color: 'white', borderColor: 'white', '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.1)' } }}
-              >
-                Admin Login
-              </Button>
-              <Button
-                variant="outlined"
-                size="small"
-                onClick={() => window.location.href = '/studio/login'}
-                sx={{ color: 'white', borderColor: 'white', '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.1)' } }}
-              >
-                Studio Login
-              </Button>
+    <Box
+      sx={{
+        minHeight: '100vh',
+        background: bgGradient,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        py: { xs: 3, sm: 4 },
+        px: 2,
+        position: 'relative',
+        overflow: 'hidden',
+        '&::before': {
+          content: '""',
+          position: 'absolute',
+          top: -100,
+          right: -100,
+          width: 400,
+          height: 400,
+          borderRadius: '50%',
+          background: `radial-gradient(circle, rgba(196, 92, 92, 0.08) 0%, transparent 70%)`,
+          pointerEvents: 'none',
+        },
+        '&::after': {
+          content: '""',
+          position: 'absolute',
+          bottom: -150,
+          left: -150,
+          width: 500,
+          height: 500,
+          borderRadius: '50%',
+          background: `radial-gradient(circle, rgba(196, 92, 92, 0.06) 0%, transparent 70%)`,
+          pointerEvents: 'none',
+        },
+      }}
+    >
+      <Container maxWidth="sm" sx={{ position: 'relative', zIndex: 1 }}>
+        <Fade in timeout={600}>
+          <Paper
+            elevation={0}
+            sx={{
+              p: { xs: 3, sm: 4 },
+              width: '100%',
+              borderRadius: 4,
+              border: '1px solid',
+              borderColor: 'rgba(0,0,0,0.06)',
+              bgcolor: 'rgba(255, 255, 255, 0.85)',
+              backdropFilter: 'blur(12px)',
+              boxShadow: '0 24px 48px rgba(0,0,0,0.06)',
+            }}
+          >
+            <Box sx={{ textAlign: 'center', mb: 4 }}>
+              <Box
+                component="img"
+                src={logo}
+                alt="MarryTube"
+                sx={{
+                  height: { xs: 160, sm: 200 },
+                  width: 'auto',
+                  maxWidth: '100%',
+                  objectFit: 'contain',
+                  filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.08))',
+                }}
+              />
+              <Typography variant="body2" sx={{ color: 'text.secondary', mt: 1 }}>
+                Sign in with OTP
+              </Typography>
             </Box>
-          </Box>
 
-          <Paper sx={{ p: 3, bgcolor: 'white', color: 'text.primary' }}>
             <Tabs
               value={tabValue}
               onChange={handleTabChange}
               variant="fullWidth"
-              sx={{ mb: 3 }}
+              sx={{
+                mb: 3,
+                '& .MuiTab-root': { textTransform: 'none', fontWeight: 600, fontSize: '0.95rem' },
+                '& .Mui-selected': { color: accent },
+                '& .MuiTabs-indicator': { backgroundColor: accent, height: 3, borderRadius: '3px 3px 0 0' },
+              }}
             >
-              <Tab icon={<Phone />} iconPosition="start" label="Mobile" />
-              <Tab icon={<Email />} iconPosition="start" label="Email" />
+              <Tab icon={<Phone sx={{ fontSize: 20 }} />} iconPosition="start" label="Mobile" />
+              <Tab icon={<Email sx={{ fontSize: 20 }} />} iconPosition="start" label="Email" />
             </Tabs>
 
             {error && (
               <Slide direction="down" in={Boolean(error)}>
-                <Alert severity="error" sx={{ mb: 2 }}>
+                <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }} onClose={() => setError('')}>
                   {error}
                 </Alert>
               </Slide>
@@ -227,7 +253,7 @@ const Login = () => {
 
             {success && (
               <Slide direction="down" in={Boolean(success)}>
-                <Alert severity="success" sx={{ mb: 2 }}>
+                <Alert severity="success" sx={{ mb: 2, borderRadius: 2 }}>
                   {success}
                 </Alert>
               </Slide>
@@ -242,7 +268,15 @@ const Login = () => {
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
                   placeholder={tabValue === 0 ? '+91 1234567890' : 'user@example.com'}
-                  sx={{ mb: 3 }}
+                  sx={{
+                    mb: 3,
+                    '& .MuiOutlinedInput-root': {
+                      borderRadius: 2,
+                      bgcolor: 'rgba(255,255,255,0.8)',
+                      '&.Mui-focused fieldset': { borderColor: accent },
+                    },
+                    '& .MuiInputLabel-root.Mui-focused': { color: accent },
+                  }}
                   disabled={loading}
                 />
                 <Button
@@ -251,9 +285,21 @@ const Login = () => {
                   size="large"
                   onClick={handleSendOTP}
                   disabled={loading}
-                  sx={{ py: 1.5 }}
+                  sx={{
+                    py: 1.5,
+                    borderRadius: 2,
+                    textTransform: 'none',
+                    fontWeight: 600,
+                    fontSize: '1rem',
+                    bgcolor: accent,
+                    boxShadow: `0 4px 14px ${accent}40`,
+                    '&:hover': {
+                      bgcolor: '#a84d4d',
+                      boxShadow: `0 6px 20px ${accent}50`,
+                    },
+                  }}
                 >
-                  {loading ? <CircularProgress size={24} /> : 'Send OTP'}
+                  {loading ? <CircularProgress size={24} color="inherit" /> : 'Send OTP'}
                 </Button>
               </Box>
             ) : (
@@ -265,30 +311,38 @@ const Login = () => {
                   value={otp}
                   onChange={(e) => setOtp(e.target.value)}
                   placeholder="123456"
-                  sx={{ mb: 2 }}
+                  sx={{
+                    mb: 2,
+                    '& .MuiOutlinedInput-root': {
+                      borderRadius: 2,
+                      bgcolor: 'rgba(255,255,255,0.8)',
+                      '&.Mui-focused fieldset': { borderColor: accent },
+                    },
+                    '& .MuiInputLabel-root.Mui-focused': { color: accent },
+                  }}
                   disabled={loading}
                   InputProps={{
-                    startAdornment: <Lock sx={{ mr: 1, color: 'text.secondary' }} />,
+                    startAdornment: <Lock sx={{ mr: 1, color: 'text.secondary', fontSize: 20 }} />,
                   }}
                 />
-                
-                {/* Timer and Resend OTP */}
+
                 <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   {timer > 0 ? (
                     <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.875rem' }}>
-                      Resend OTP in: <strong style={{ color: '#667eea' }}>{formatTime(timer)}</strong>
+                      Resend OTP in: <strong style={{ color: accent }}>{formatTime(timer)}</strong>
                     </Typography>
                   ) : (
                     <Button
                       variant="text"
                       size="small"
-                      startIcon={<Refresh />}
+                      startIcon={<Refresh sx={{ fontSize: 18 }} />}
                       onClick={handleResendOTP}
                       disabled={resendLoading}
-                      sx={{ 
-                        color: '#667eea',
+                      sx={{
+                        color: accent,
                         textTransform: 'none',
-                        '&:hover': { bgcolor: 'rgba(102, 126, 234, 0.1)' }
+                        fontWeight: 600,
+                        '&:hover': { bgcolor: `${accent}15` },
                       }}
                     >
                       {resendLoading ? <CircularProgress size={16} /> : 'Resend OTP'}
@@ -306,7 +360,14 @@ const Login = () => {
                     setError('');
                     setTimer(0);
                   }}
-                  sx={{ mb: 2 }}
+                  sx={{
+                    mb: 2,
+                    borderRadius: 2,
+                    textTransform: 'none',
+                    borderColor: 'divider',
+                    color: 'text.secondary',
+                    '&:hover': { borderColor: accent, color: accent, bgcolor: `${accent}08` },
+                  }}
                   disabled={loading}
                 >
                   Change {tabValue === 0 ? 'Mobile' : 'Email'}
@@ -317,9 +378,21 @@ const Login = () => {
                   size="large"
                   onClick={handleVerifyOTP}
                   disabled={loading}
-                  sx={{ py: 1.5 }}
+                  sx={{
+                    py: 1.5,
+                    borderRadius: 2,
+                    textTransform: 'none',
+                    fontWeight: 600,
+                    fontSize: '1rem',
+                    bgcolor: accent,
+                    boxShadow: `0 4px 14px ${accent}40`,
+                    '&:hover': {
+                      bgcolor: '#a84d4d',
+                      boxShadow: `0 6px 20px ${accent}50`,
+                    },
+                  }}
                 >
-                  {loading ? <CircularProgress size={24} /> : 'Verify OTP'}
+                  {loading ? <CircularProgress size={24} color="inherit" /> : 'Verify OTP'}
                 </Button>
                 <Typography variant="caption" color="text.secondary" sx={{ mt: 2, display: 'block', textAlign: 'center' }}>
                   Demo: Use OTP 123456
@@ -327,9 +400,9 @@ const Login = () => {
               </Box>
             )}
           </Paper>
-        </Paper>
-      </Fade>
-    </Container>
+        </Fade>
+      </Container>
+    </Box>
   );
 };
 

@@ -62,13 +62,13 @@ const Dashboard = () => {
       id: 0,
       value: Math.max(0, parseFloat(storage.usedStorage) || 0),
       label: 'Used',
-      color: '#1976d2',
+      color: '#c45c5c',
     },
     {
       id: 1,
       value: Math.max(0, parseFloat(storage.availableStorage) || 0),
       label: 'Available',
-      color: '#4caf50',
+      color: '#7a9e7e',
     },
   ]
     .map(item => {
@@ -109,13 +109,15 @@ const Dashboard = () => {
             <Grid item xs={12} md={8}>
               <Grow in timeout={800}>
                 <Paper
-                  elevation={4}
+                  elevation={0}
                   sx={{
                     p: { xs: 2, sm: 3 },
                     height: '100%',
-                    borderRadius: 2,
-                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    borderRadius: 3,
+                    border: '1px solid rgba(0,0,0,0.06)',
+                    background: 'linear-gradient(145deg, #c45c5c 0%, #a84d4d 100%)',
                     color: 'white',
+                    boxShadow: '0 8px 32px rgba(196, 92, 92, 0.25)',
                   }}
                 >
                   <Typography 
@@ -202,14 +204,17 @@ const Dashboard = () => {
             <Grid item xs={12} md={4}>
               <Grow in timeout={1000}>
                 <Paper
-                  elevation={4}
+                  elevation={0}
                   sx={{
                     p: { xs: 2, sm: 3 },
                     height: '100%',
-                    borderRadius: 2,
+                    borderRadius: 3,
                     display: 'flex',
                     flexDirection: 'column',
                     justifyContent: 'space-between',
+                    bgcolor: 'rgba(255,255,255,0.9)',
+                    border: '1px solid rgba(0,0,0,0.06)',
+                    boxShadow: '0 4px 20px rgba(0,0,0,0.06)',
                   }}
                 >
                   <Box>
@@ -275,20 +280,23 @@ const Dashboard = () => {
             <Grid item xs={12} sm={6}>
               <Grow in timeout={1400}>
                 <Paper
-                  elevation={4}
+                  elevation={0}
                   sx={{
                     p: { xs: 2, sm: 3 },
-                    borderRadius: 2,
+                    borderRadius: 3,
                     cursor: 'pointer',
+                    bgcolor: 'rgba(255,255,255,0.9)',
+                    border: '1px solid rgba(0,0,0,0.06)',
+                    boxShadow: '0 4px 20px rgba(0,0,0,0.06)',
                     transition: 'transform 0.2s, box-shadow 0.2s',
                     '&:hover': {
                       transform: 'translateY(-4px)',
-                      boxShadow: 6,
+                      boxShadow: '0 12px 32px rgba(196, 92, 92, 0.15)',
                     },
                   }}
                   onClick={() => navigate('/media')}
                 >
-                  <TrendingUpIcon sx={{ fontSize: 48, color: 'secondary.main', mb: 2 }} />
+                  <TrendingUpIcon sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
                   <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold' }}>
                     View Media
                   </Typography>
