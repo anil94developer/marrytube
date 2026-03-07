@@ -1,0 +1,446 @@
+# User Account API Documentation
+
+Base URL: `http://localhost:5001/api` (or your `API_BASE_URL`).
+
+For **protected routes**, send the JWT in the header:
+```http
+Authorization: Bearer <token>
+```
+
+---
+
+## 1. Auth (`/api/auth`)
+
+### 1.1 Send OTP
+Send OTP for login/register (email or mobile).
+
+| Method | Endpoint        | Auth |
+|--------|-----------------|------|
+| POST   | `/api/auth/send-otp` | No  |
+
+**Body (JSON):**
+```json
+{
+  "identifier": "user@example.com",
+  "type": "email"
+}
+```
+- `identifier`: email address or phone number
+- `type`: `"email"` or `"mobile"`
+
+**Success (200):**
+```json
+{
+  "success": true,
+  "message": "OTP sent successfully"
+}
+```
+
+---
+
+### 1.2 Verify OTP and Login/Register
+Verify OTP and get user + JWT. Creates user if not found.
+
+| Method | Endpoint           | Auth |
+|--------|--------------------|------|
+| POST   | `/api/auth/verify-otp` | No  |
+
+**Body (JSON):**
+```json
+{
+  "identifier": "user@example.com",
+  "otp": "123456",
+  "type": "email",
+  "userType": "customer"
+}
+```
+- `userType` (optional): `"customer"` \| `"admin"` \| `"studio"` (default: `"customer"`)
+
+**Success (200):**
+```json
+{
+  "success": true,
+  "user": { "id": 1, "email": "...", "userType": "customer", ... },
+  "token": "eyJhbGciOiJIUzI1NiIs...",
+  "isNewUser": false
+}
+```
+
+---
+
+### 1.3 Get current user (me)
+Get logged-in user profile.
+
+| Method | Endpoint      | Auth |
+|--------|---------------|------|
+| GET    | `/api/auth/me` | Yes (Bearer) |
+
+**Success (200):**
+```json
+{
+  "success": true,
+  "user": { "id": 1, "email": "...", "mobile": "...", "userType": "customer", ... }
+}
+```
+
+---
+
+### 1.4 Change phone number
+Change phone for logged-in user (OTP required).
+
+| Method | Endpoint              | Auth |
+|--------|------------------------|------|
+| POST   | `/api/auth/change-phone` | Yes (Bearer) |
+
+**Body (JSON):**
+```json
+{
+  "newPhone": "9876543210",
+  "otp": "123456"
+}
+```
+
+**Success (200):**
+```json
+{
+  "success": true,
+  "message": "Phone number changed successfully"
+}
+```
+
+---
+
+## 2. Storage (`/api/storage`)
+
+### 2.1 Dashboard (storage + media counts)
+Get storage usage and video/image counts for the logged-in user. Same data as home dashboard.
+
+| Method | Endpoint               | Auth |
+|--------|------------------------|------|
+| GET    | `/api/storage/dashboard` | Yes (Bearer) |
+
+**Success (200):**
+```json
+{
+  "storage": {
+    "totalStorage": 1,
+    "usedStorage": 0,
+    "availableStorage": 1
+  },
+  "videoCount": 0,
+  "imageCount": 0
+}
+```
+
+---
+
+### 2.2 Get user storage
+Get current user’s storage record (total, used, available).
+
+| Method | Endpoint            | Auth |
+|--------|---------------------|------|
+| GET    | `/api/storage/user`  | Yes (Bearer) |
+
+**Success (200):** Storage object (e.g. `totalStorage`, `usedStorage`, `availableStorage`).
+
+---
+
+### 2.3 Get storage plans (public)
+List active storage plans (for purchase page).
+
+| Method | Endpoint             | Auth |
+|--------|----------------------|------|
+| GET    | `/api/storage/plans` | No   |
+
+**Success (200):** Array of plans, e.g.:
+```json
+[
+  {
+    "id": 1,
+    "storage": 10,
+    "period": "month",
+    "price": 99,
+    "category": "fixed",
+    "periodLabel": "per month",
+    "isActive": true
+  }
+]
+```
+
+---
+
+### 2.4 Get my plans (drives)
+Get logged-in user’s drives (default + purchased plans). Same shape as “My Media” drives.
+
+| Method | Endpoint               | Auth |
+|--------|------------------------|------|
+| GET    | `/api/storage/my-plans` | Yes (Bearer) |
+
+**Success (200):** Array of drives, e.g.:
+```json
+[
+  {
+    "id": "default",
+    "userId": 1,
+    "totalStorage": 1,
+    "usedStorage": 0,
+    "availableStorage": 1,
+    "expiryDate": null,
+    "isDefault": true,
+    "status": "active"
+  },
+  {
+    "id": 5,
+    "totalStorage": 10,
+    "usedStorage": 1234567890,
+    "expiryDate": "2026-03-01",
+    "status": "active"
+  }
+]
+```
+- Default drive has `id: "default"`, `isDefault: true`. Others have numeric `id` and `usedStorage` in bytes.
+
+---
+
+### 2.5 Purchase storage
+Purchase storage for the logged-in user.
+
+| Method | Endpoint               | Auth |
+|--------|------------------------|------|
+| POST   | `/api/storage/purchase` | Yes (Bearer) |
+
+**Body (JSON):**
+```json
+{
+  "storage": 5,
+  "period": "month",
+  "price": 199,
+  "planId": 2
+}
+```
+- `storage`: amount in GB (for per-GB plans).
+- `period`: `"month"` or `"year"`.
+- `price`: amount to charge.
+- `planId` (optional): plan ID from `/api/storage/plans`.
+
+**Success (200):**
+```json
+{
+  "success": true,
+  "message": "5 GB storage purchased successfully",
+  "storage": { "totalStorage": 6, "usedStorage": 0, "availableStorage": 6, ... }
+}
+```
+
+---
+
+### 2.6 Move media between drives
+Move media from one drive to another (user’s own media only).
+
+| Method | Endpoint                  | Auth |
+|--------|---------------------------|------|
+| POST   | `/api/storage/move-media` | Yes (Bearer) |
+
+**Body (JSON):**
+```json
+{
+  "fromUserPlanId": "default",
+  "toUserPlanId": "5",
+  "mediaIds": [1, 2, 3]
+}
+```
+- `fromUserPlanId`: `"default"` or plan id (string).
+- `toUserPlanId`: `"default"` or plan id (string).
+- `mediaIds` (optional): array of media IDs to move. If omitted, moves all media from source drive.
+
+**Success (200):** `{ ... }` (move result).
+
+---
+
+## 3. Media (`/api/media`)
+
+All media routes require **Bearer token**.
+
+### 3.1 List media
+List user’s media, optionally by drive and folder.
+
+| Method | Endpoint          | Auth |
+|--------|-------------------|------|
+| GET    | `/api/media/list` | Yes (Bearer) |
+
+**Query:**
+- `category`: `video` \| `image` (optional).
+- `folderId`: folder ID or empty for root (optional).
+- `userPlanId`: `default` or plan id to scope by drive (optional).
+
+**Success (200):** Array of media objects (with `folder` when applicable).
+
+---
+
+### 3.2 Get single media
+Get one media by ID (must belong to user).
+
+| Method | Endpoint             | Auth |
+|--------|----------------------|------|
+| GET    | `/api/media/:mediaId` | Yes (Bearer) |
+
+**Success (200):** Media object. **404** if not found.
+
+---
+
+### 3.3 Get upload URL (presigned)
+Get presigned URL for client-side upload (e.g. S3).
+
+| Method | Endpoint              | Auth |
+|--------|-----------------------|------|
+| POST   | `/api/media/upload-url` | Yes (Bearer) |
+
+**Body (JSON):**
+```json
+{
+  "fileName": "photo.jpg",
+  "mimeType": "image/jpeg",
+  "size": 1024000,
+  "userPlanId": "default"
+}
+```
+- `userPlanId` (optional): `"default"` or plan id for the drive.
+
+**Success (200):**
+```json
+{
+  "success": true,
+  "uploadURL": "https://...",
+  "s3Key": "...",
+  "url": "https://..."
+}
+```
+
+---
+
+### 3.4 Direct upload (multipart)
+Upload file with `multipart/form-data`.
+
+| Method | Endpoint          | Auth |
+|--------|-------------------|------|
+| POST   | `/api/media/upload` | Yes (Bearer) |
+
+**Body (FormData):**
+- `media`: file.
+- `userPlanId` (optional): `"default"` or plan id.
+- `folderId` (optional): folder id.
+
+**Success (200):**
+```json
+{
+  "success": true,
+  "media": { "id": 1, "name": "...", "url": "...", "category": "image", ... }
+}
+```
+
+---
+
+### 3.5 Save media (after external upload)
+Save media record after uploading via presigned URL.
+
+| Method | Endpoint          | Auth |
+|--------|-------------------|------|
+| POST   | `/api/media/save`  | Yes (Bearer) |
+
+**Body (JSON):**
+```json
+{
+  "name": "photo.jpg",
+  "url": "https://...",
+  "s3Key": "...",
+  "category": "image",
+  "size": 1024000,
+  "mimeType": "image/jpeg",
+  "folderId": null,
+  "userPlanId": "default"
+}
+```
+- `category`: `image` \| `video` \| `document` \| `other`.
+
+**Success (200):** Created media object.
+
+---
+
+### 3.6 Delete media
+Delete one media item (and free storage).
+
+| Method | Endpoint               | Auth |
+|--------|------------------------|------|
+| DELETE | `/api/media/:mediaId`  | Yes (Bearer) |
+
+**Success (200):** `{ success: true }` or similar. **404** if not found.
+
+---
+
+### 3.7 List folders
+List user’s folders.
+
+| Method | Endpoint               | Auth |
+|--------|------------------------|------|
+| GET    | `/api/media/folders/list` | Yes (Bearer) |
+
+**Success (200):** Array of folder objects.
+
+---
+
+### 3.8 Create folder
+Create a folder (optionally under a drive).
+
+| Method | Endpoint          | Auth |
+|--------|-------------------|------|
+| POST   | `/api/media/folders` | Yes (Bearer) |
+
+**Body (JSON):**
+```json
+{
+  "name": "My folder",
+  "planId": null
+}
+```
+- `planId` or `userPlanId` (optional): plan id for drive; `null`/omit for default drive.
+
+**Success (200):** Created folder object.
+
+---
+
+### 3.9 Delete folder
+Delete a folder (media inside get `folderId: null`).
+
+| Method | Endpoint                    | Auth |
+|--------|-----------------------------|------|
+| DELETE | `/api/media/folders/:folderId` | Yes (Bearer) |
+
+**Success (200):** `{ success: true }`. **404** if folder not found.
+
+---
+
+## 4. Health
+
+| Method | Endpoint        | Auth |
+|--------|-----------------|------|
+| GET    | `/api/health`   | No   |
+
+**Success (200):**
+```json
+{
+  "status": "OK",
+  "message": "Server is running"
+}
+```
+
+---
+
+## 5. Errors
+
+- **400** – Validation error: `{ success: false, errors: [...] }` or `{ success: false, message: "..." }`.
+- **401** – Missing or invalid token: `{ success: false, message: "No token provided" }` or `"Invalid token"`.
+- **403** – Forbidden (e.g. admin/studio only).
+- **404** – Resource not found.
+- **500** – Server error: `{ success: false, message: "Server error" }`.
+
+Always send `Content-Type: application/json` for JSON requests and expect JSON responses unless noted (e.g. file upload uses `multipart/form-data`).

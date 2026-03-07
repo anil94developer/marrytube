@@ -10,6 +10,7 @@ import MediaUpload from './pages/MediaUpload';
 import MediaList from './pages/MediaList';
 import MediaDriveDetail from './pages/MediaDriveDetail';
 import MediaView from './pages/MediaView';
+import ShareView from './pages/ShareView';
 import Profile from './pages/Profile';
 import HowToUse from './pages/HowToUse';
 import Layout from './components/Layout';
@@ -68,6 +69,7 @@ function App() {
       <Routes>
         {/* Public Routes */}
         <Route path="/login" element={<Login />} />
+        <Route path="/share/:token" element={<ShareView />} />
         <Route path="/admin/login" element={<AdminLogin />} />
         <Route path="/studio/login" element={<StudioLogin />} />
 

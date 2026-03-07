@@ -41,10 +41,13 @@ export const createFolder = async ({ clientId, name, userPlanId }) => {
 
 // —— Customer (user) APIs ——
 
-/** Get folders for logged-in user */
-export const getFoldersForUser = async () => {
+/** Get folders for logged-in user. Optional parentFolderId (null/'' for root), userPlanId to filter by drive. */
+export const getFoldersForUser = async (parentFolderId = undefined, userPlanId = undefined) => {
   try {
-    const res = await axios.get('/media/folders/list');
+    const params = {};
+    if (parentFolderId !== undefined) params.parentFolderId = parentFolderId === null || parentFolderId === '' ? '' : parentFolderId;
+    if (userPlanId !== undefined) params.userPlanId = userPlanId === null || userPlanId === 'default' ? 'default' : userPlanId;
+    const res = await axios.get('/media/folders/list', { params });
     return Array.isArray(res.data) ? res.data : [];
   } catch (error) {
     console.error('Failed to fetch folders:', error);
@@ -52,12 +55,31 @@ export const getFoldersForUser = async () => {
   }
 };
 
-/** Create folder for logged-in user (user panel). Same as studio: { name, planId }. planId = drive card id. */
-export const createFolderForUser = async (name, planId = null) => {
+/** Create folder (name, planId, parentFolderId for nested). */
+export const createFolderForUser = async (name, planId = null, parentFolderId = null) => {
   const folderName = typeof name === 'string' ? name.trim() : '';
   if (!folderName) throw new Error('Folder name is required');
   const body = { name: folderName, userPlanId: (planId && planId !== 'default') ? planId : null };
+  if (parentFolderId !== undefined && parentFolderId !== null && parentFolderId !== '') body.parentFolderId = parentFolderId;
   const res = await axios.post('/media/folders', body);
+  return res.data;
+};
+
+/** Update folder (rename and/or move to another parent). */
+export const updateFolder = async (folderId, { name, parentFolderId }) => {
+  const res = await axios.patch(`/media/folders/${folderId}`, { name, parentFolderId });
+  return res.data;
+};
+
+/** Update media (rename and/or move to folder). */
+export const updateMedia = async (mediaId, { name, folderId }) => {
+  const res = await axios.patch(`/media/${mediaId}`, { name, folderId });
+  return res.data;
+};
+
+/** Copy media to same or another folder (same drive). */
+export const copyMedia = async (mediaId, folderId = null) => {
+  const res = await axios.post(`/media/${mediaId}/copy`, { folderId });
   return res.data;
 };
 
@@ -135,5 +157,37 @@ export const saveMedia = async (mediaData) => {
 
 export const deleteFolder = async (folderId) => {
   const res = await axios.delete(`/media/folders/${folderId}`);
+  return res.data;
+};
+
+/** Move folder (and its media) to another drive. Optional toFolderId = parent folder on destination drive. */
+export const moveFolderToDrive = async (folderId, toUserPlanId, toFolderId = null) => {
+  const body = { toUserPlanId };
+  if (toFolderId != null && toFolderId !== '') body.toFolderId = toFolderId;
+  const res = await axios.post(`/media/folders/${folderId}/move-to-drive`, body);
+  return res.data;
+};
+
+/** Copy folder (and its media) to another drive. Optional toFolderId = parent folder on destination drive. */
+export const copyFolderToDrive = async (folderId, toUserPlanId, toFolderId = null) => {
+  const body = { toUserPlanId };
+  if (toFolderId != null && toFolderId !== '') body.toFolderId = toFolderId;
+  const res = await axios.post(`/media/folders/${folderId}/copy-to-drive`, body);
+  return res.data;
+};
+
+/** Create share link. resourceType: 'folder'|'media'|'drive'. For drive use resourceId 0 (default) or plan id. */
+export const createShare = async (resourceType, resourceId, expiresInDays = null) => {
+  const id = resourceType === 'drive' && (resourceId === 'default' || resourceId == null) ? 0 : resourceId;
+  const body = { resourceType, resourceId: Number(id) };
+  if (expiresInDays != null) body.expiresInDays = expiresInDays;
+  const res = await axios.post('/share/', body);
+  return res.data;
+};
+
+/** Resolve public share token (no auth). Optional folderId to open a subfolder of shared folder. */
+export const getShareByToken = async (token, folderId = null) => {
+  const params = folderId != null && folderId !== '' ? { folderId } : {};
+  const res = await axios.get(`/share/${token}`, { params });
   return res.data;
 };

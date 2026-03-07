@@ -32,6 +32,7 @@ import {
   ToggleButton,
   TextField,
   Skeleton,
+  CircularProgress,
 } from '@mui/material';
 import {
   Storage as StorageIcon,
@@ -45,11 +46,12 @@ import {
   CreateNewFolder as CreateFolderIcon,
   Refresh as RefreshIcon,
   FolderOpen as FolderOpenIcon,
+  Link as ShareIcon,
 } from '@mui/icons-material';
 import { useDropzone } from 'react-dropzone';
 import { useAuth } from '../contexts/AuthContext';
 import { getMyPlans, moveMediaBetweenDrives } from '../services/storageService';
-import { getMediaList, uploadMediaForUser, getFoldersForUser, createFolderForUser } from '../services/mediaService';
+import { getMediaList, uploadMediaForUser, getFoldersForUser, createFolderForUser, createShare } from '../services/mediaService';
 import { formatStorageWithUnits } from '../utils/storageFormat';
 
 const BYTES_PER_GB = 1024 * 1024 * 1024;
@@ -67,6 +69,7 @@ const MediaList = () => {
   const [moveFilter, setMoveFilter] = useState('all');
   const [moveLoading, setMoveLoading] = useState(false);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+  const [shareDriveDialog, setShareDriveDialog] = useState({ open: false, plan: null, link: '', loading: false });
 
   // Upload state (inside dialog)
   const [uploadFiles, setUploadFiles] = useState([]);
@@ -110,6 +113,27 @@ const MediaList = () => {
       loadMediaForPlan(id);
     }
   }, [moveDialog.open, moveDialog.sourcePlan?.id]);
+
+  const handleShareDrive = (plan) => {
+    setShareDriveDialog({ open: true, plan, link: '', loading: true });
+  };
+
+  useEffect(() => {
+    if (!shareDriveDialog.open || !shareDriveDialog.plan || shareDriveDialog.link) return;
+    const plan = shareDriveDialog.plan;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await createShare('drive', plan.id === 'default' ? 0 : plan.id, 30);
+        const url = res.shareUrl || `${window.location.origin}/share/${res.token}`;
+        if (!cancelled) setShareDriveDialog((p) => ({ ...p, link: url, loading: false }));
+      } catch (e) {
+        if (!cancelled) setShareDriveDialog((p) => ({ ...p, link: '', loading: false }));
+        setSnackbar({ open: true, message: e?.response?.data?.message || 'Failed to create share link', severity: 'error' });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [shareDriveDialog.open, shareDriveDialog.plan]);
 
   const getAvailableGB = (plan) => {
     if (!plan) return 0;
@@ -344,6 +368,15 @@ const MediaList = () => {
                           <Box sx={{ p: 2, pt: 0, display: 'flex', flexDirection: 'column', gap: 1, alignItems: 'flex-end' }}>
                             <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                               <Button
+                                variant="outlined"
+                                size="small"
+                                startIcon={<ShareIcon />}
+                                onClick={(e) => { e.stopPropagation(); handleShareDrive(plan); }}
+                                title="Get shareable link"
+                              >
+                                Share drive
+                              </Button>
+                              <Button
                                 variant="contained"
                                 size="small"
                                 startIcon={<AddIcon />}
@@ -546,6 +579,31 @@ const MediaList = () => {
           <Button variant="contained" onClick={handleMoveSubmit} disabled={!moveToPlanId || moveLoading}>
             {moveLoading ? 'Moving...' : 'Move'}
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={shareDriveDialog.open} onClose={() => setShareDriveDialog({ open: false, plan: null, link: '', loading: false })} maxWidth="sm" fullWidth>
+        <DialogTitle>Share drive</DialogTitle>
+        <DialogContent>
+          {shareDriveDialog.plan && (
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+              {shareDriveDialog.plan.isDefault ? 'Default drive' : `Plan ${shareDriveDialog.plan.totalStorage} GB`}
+            </Typography>
+          )}
+          {shareDriveDialog.loading ? (
+            <Box sx={{ py: 2, textAlign: 'center' }}><CircularProgress size={32} /></Box>
+          ) : shareDriveDialog.link ? (
+            <Box>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>Anyone with this link can view the drive (view-only).</Typography>
+              <TextField fullWidth size="small" value={shareDriveDialog.link} readOnly InputProps={{ readOnly: true }} sx={{ mb: 1 }} />
+              <Button variant="contained" size="small" onClick={() => { navigator.clipboard.writeText(shareDriveDialog.link); setSnackbar({ open: true, message: 'Link copied', severity: 'success' }); }}>
+                Copy link
+              </Button>
+            </Box>
+          ) : null}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShareDriveDialog({ open: false, plan: null, link: '', loading: false })}>Close</Button>
         </DialogActions>
       </Dialog>
 

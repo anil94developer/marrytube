@@ -31,11 +31,21 @@ export const getMyPlans = async () => {
   return Array.isArray(res.data) ? res.data : [];
 };
 
-/** Move media between drives. fromUserPlanId / toUserPlanId: 'default' or plan id */
-export const moveMediaBetweenDrives = async (fromUserPlanId, toUserPlanId, mediaIds = null) => {
+/** Move media between drives. Optional toFolderId = folder on destination drive. */
+export const moveMediaBetweenDrives = async (fromUserPlanId, toUserPlanId, mediaIds = null, toFolderId = null) => {
   const body = { fromUserPlanId: String(fromUserPlanId), toUserPlanId: String(toUserPlanId) };
   if (Array.isArray(mediaIds) && mediaIds.length > 0) body.mediaIds = mediaIds;
+  if (toFolderId != null && toFolderId !== '') body.toFolderId = toFolderId;
   const res = await axios.post('/storage/move-media', body);
+  return res.data;
+};
+
+/** Copy media to another drive. Optional toFolderId = folder on destination drive. */
+export const copyMediaToDrive = async (fromUserPlanId, toUserPlanId, mediaIds = null, toFolderId = null) => {
+  const body = { fromUserPlanId: String(fromUserPlanId), toUserPlanId: String(toUserPlanId) };
+  if (Array.isArray(mediaIds) && mediaIds.length > 0) body.mediaIds = mediaIds;
+  if (toFolderId != null && toFolderId !== '') body.toFolderId = toFolderId;
+  const res = await axios.post('/storage/copy-media', body);
   return res.data;
 };
 
