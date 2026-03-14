@@ -68,6 +68,7 @@ import {
   uploadMediaForUser,
   updateFolder,
   updateMedia,
+  moveMediaToFolder,
   copyMedia,
   deleteFolder,
   moveFolderToDrive,
@@ -127,6 +128,8 @@ const MediaDriveDetail = () => {
   const [destinationDriveFolders, setDestinationDriveFolders] = useState([]);
   const [renameDialog, setRenameDialog] = useState({ open: false, name: '', item: null, type: 'folder' });
   const [shareDialog, setShareDialog] = useState({ open: false, link: '', item: null });
+  const [dragItem, setDragItem] = useState(null);
+  const [dropTargetFolderId, setDropTargetFolderId] = useState(null);
 
   const loadDriveData = useCallback(async () => {
     setLoading(true);
@@ -282,18 +285,28 @@ const MediaDriveDetail = () => {
       const toFolderIdOnDrive = (moveCopyDialog.targetFolderIdOnDrive !== '' && moveCopyDialog.targetFolderIdOnDrive != null) ? moveCopyDialog.targetFolderIdOnDrive : null;
       if (type === 'folder') {
         if (hasDrive) {
-          if (mode === 'move') await moveFolderToDrive(item.id, targetDriveId, toFolderIdOnDrive);
-          else await copyFolderToDrive(item.id, targetDriveId, toFolderIdOnDrive);
+          if (mode === 'move') {
+            await moveFolderToDrive(item.id, targetDriveId, toFolderIdOnDrive);
+            setFolders((prev) => prev.filter((f) => f.id !== item.id));
+          } else await copyFolderToDrive(item.id, targetDriveId, toFolderIdOnDrive);
         } else {
           await updateFolder(item.id, { parentFolderId: targetFolderId || null });
+          if (mode === 'move') setFolders((prev) => prev.filter((f) => f.id !== item.id));
         }
       } else {
         if (hasDrive) {
-          if (mode === 'move') await moveMediaBetweenDrives(userPlanId, targetDriveId, [item.id], toFolderIdOnDrive);
-          else await copyMediaToDrive(userPlanId, targetDriveId, [item.id], toFolderIdOnDrive);
+          if (mode === 'move') {
+            await moveMediaBetweenDrives(userPlanId, targetDriveId, [item.id], toFolderIdOnDrive);
+            setMedia((prev) => prev.filter((m) => m.id !== item.id));
+          } else await copyMediaToDrive(userPlanId, targetDriveId, [item.id], toFolderIdOnDrive);
         } else {
-          if (mode === 'move') await updateMedia(item.id, { folderId: targetFolderId || null });
-          else await copyMedia(item.id, targetFolderId || null);
+          if (mode === 'move') {
+            const toFolderId = (targetFolderId !== '' && targetFolderId != null) ? targetFolderId : null;
+            await moveMediaToFolder(item.id, toFolderId);
+            setMedia((prev) => prev.filter((m) => m.id !== item.id));
+          } else {
+            await copyMedia(item.id, targetFolderId || null);
+          }
         }
       }
       setMoveCopyDialog({ open: false, type: null, targetFolderId: '', targetDriveId: '', targetFolderIdOnDrive: '', mode: 'move', item: null });
@@ -312,6 +325,71 @@ const MediaDriveDetail = () => {
       setSnackbar({ open: true, message: e?.response?.data?.message || 'Share failed', severity: 'error' });
     }
   };
+
+  const handleDragStart = useCallback((e, type, item) => {
+    e.dataTransfer.setData('application/json', JSON.stringify({ type, id: item.id }));
+    e.dataTransfer.effectAllowed = 'move';
+    setDragItem({ type, item });
+  }, []);
+
+  const handleDragEnd = useCallback(() => {
+    setDragItem(null);
+    setDropTargetFolderId(null);
+  }, []);
+
+  const handleDragOver = useCallback((e, folderId) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDropTargetFolderId(folderId);
+  }, []);
+
+  const handleDragLeave = useCallback((e) => {
+    if (!e.currentTarget.contains(e.relatedTarget)) setDropTargetFolderId(null);
+  }, []);
+
+  const handleDrop = useCallback(async (e, targetFolderId) => {
+    e.preventDefault();
+    setDropTargetFolderId(null);
+    let payload;
+    try {
+      payload = JSON.parse(e.dataTransfer.getData('application/json'));
+    } catch {
+      setDragItem(null);
+      return;
+    }
+    const { type, id } = payload;
+    setDragItem(null);
+    if (!type || !id) return;
+    const resolvedTargetFolderId = targetFolderId === 'root' ? currentFolderId : targetFolderId;
+    if (type === 'folder') {
+      const item = folders.find((f) => f.id === id);
+      if (!item) return;
+      if (item.id === resolvedTargetFolderId) {
+        setSnackbar({ open: true, message: 'Folder cannot be moved into itself', severity: 'warning' });
+        return;
+      }
+      try {
+        await updateFolder(item.id, { parentFolderId: resolvedTargetFolderId ?? null });
+        setFolders((prev) => prev.filter((f) => f.id !== item.id));
+        await loadDriveData();
+        setSnackbar({ open: true, message: 'Folder moved', severity: 'success' });
+      } catch (err) {
+        setSnackbar({ open: true, message: err?.response?.data?.message || 'Move failed', severity: 'error' });
+      }
+    } else if (type === 'media') {
+      const item = media.find((m) => m.id === id);
+      if (!item) return;
+      try {
+        const toFolderId = (resolvedTargetFolderId !== undefined && resolvedTargetFolderId !== null) ? resolvedTargetFolderId : null;
+        await moveMediaToFolder(item.id, toFolderId);
+        setMedia((prev) => prev.filter((m) => m.id !== item.id));
+        await loadDriveData();
+        setSnackbar({ open: true, message: 'File moved', severity: 'success' });
+      } catch (err) {
+        setSnackbar({ open: true, message: err?.response?.data?.message || 'Move failed', severity: 'error' });
+      }
+    }
+  }, [currentFolderId, folders, media, loadDriveData]);
 
   const handleDeleteFolder = async (folderId) => {
     try {
@@ -649,7 +727,16 @@ const MediaDriveDetail = () => {
               )}
             </Box>
 
-            <Box sx={{ p: 2 }}>
+            <Box
+              sx={{
+                p: 2,
+                minHeight: 120,
+                ...(dropTargetFolderId === 'root' ? { bgcolor: 'action.selected', borderRadius: 1 } : {}),
+              }}
+              onDragOver={(e) => handleDragOver(e, 'root')}
+              onDragLeave={handleDragLeave}
+              onDrop={(e) => handleDrop(e, 'root')}
+            >
               {folders.length > 0 && (
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>Folders</Typography>
@@ -657,6 +744,12 @@ const MediaDriveDetail = () => {
                     {folders.map((f) => (
                       <ListItem
                         key={f.id}
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, 'folder', f)}
+                        onDragEnd={handleDragEnd}
+                        onDragOver={(e) => { e.stopPropagation(); handleDragOver(e, f.id); }}
+                        onDragLeave={handleDragLeave}
+                        onDrop={(e) => { e.stopPropagation(); handleDrop(e, f.id); }}
                         secondaryAction={
                           <Box>
                             <IconButton size="small" onClick={(e) => { e.stopPropagation(); setRenameDialog({ open: true, name: f.name, item: f, type: 'folder' }); }} title="Rename"><EditIcon /></IconButton>
@@ -666,7 +759,12 @@ const MediaDriveDetail = () => {
                             <IconButton size="small" onClick={(e) => { e.stopPropagation(); if (window.confirm(`Delete folder "${f.name}"?`)) handleDeleteFolder(f.id); }} title="Delete"><DeleteIcon /></IconButton>
                           </Box>
                         }
-                        sx={{ cursor: 'pointer' }}
+                        sx={{
+                          cursor: 'grab',
+                          bgcolor: dropTargetFolderId === f.id ? 'primary.light' : 'transparent',
+                          borderRadius: 1,
+                          '&:active': { cursor: 'grabbing' },
+                        }}
                         onClick={() => handleNavigateToFolder(f)}
                       >
                         <ListItemIcon sx={{ minWidth: 40 }}><FolderIcon color="primary" /></ListItemIcon>
@@ -683,7 +781,15 @@ const MediaDriveDetail = () => {
                   {mediaDisplayed.map((item) => (
                     <ListItem
                       key={item.id}
-                      sx={{ borderBottom: 1, borderColor: 'divider' }}
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, 'media', item)}
+                      onDragEnd={handleDragEnd}
+                      sx={{
+                        borderBottom: 1,
+                        borderColor: 'divider',
+                        cursor: 'grab',
+                        '&:active': { cursor: 'grabbing' },
+                      }}
                       secondaryAction={
                         <Box>
                           <IconButton size="small" onClick={() => navigate(`/media/${item.id}`)}>{item.category === 'video' ? <PlayIcon /> : <ViewIcon />}</IconButton>
@@ -723,6 +829,9 @@ const MediaDriveDetail = () => {
                     <Grid item {...gridConfig.cols} key={item.id}>
                       <Grow in timeout={80}>
                         <Card
+                          draggable
+                          onDragStart={(e) => handleDragStart(e, 'media', item)}
+                          onDragEnd={handleDragEnd}
                           elevation={2}
                           sx={{
                             height: '100%',
@@ -730,6 +839,8 @@ const MediaDriveDetail = () => {
                             position: 'relative',
                             border: selectedIds.includes(item.id) ? 2 : 0,
                             borderColor: 'primary.main',
+                            cursor: 'grab',
+                            '&:active': { cursor: 'grabbing' },
                           }}
                         >
                           <Box sx={{ position: 'absolute', top: 8, left: 8, zIndex: 1 }}>

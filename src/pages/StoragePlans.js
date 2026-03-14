@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Container,
   Grid,
@@ -7,7 +7,6 @@ import {
   Box,
   Button,
   Card,
-  CardContent,
   CardActionArea,
   Fade,
   Grow,
@@ -17,9 +16,12 @@ import {
   TextField,
   Tabs,
   Tab,
-  Paper,
   InputAdornment,
   Chip,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from '@mui/material';
 import {
   CheckCircle,
@@ -29,17 +31,38 @@ import {
   Storage as StorageIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
-import { purchaseStorage, getStoragePlans } from '../services/storageService';
+import { getStoragePlans, createPaymentOrder, confirmPaymentSuccess } from '../services/storageService';
+
+const CASHFREE_SCRIPT = 'https://sdk.cashfree.com/js/v3/cashfree.js';
+const loadCashfree = () => {
+  if (window.Cashfree) return Promise.resolve(window.Cashfree);
+  return new Promise((resolve, reject) => {
+    if (document.querySelector(`script[src="${CASHFREE_SCRIPT}"]`)) {
+      if (window.Cashfree) resolve(window.Cashfree);
+      else reject(new Error('Cashfree not ready'));
+      return;
+    }
+    const s = document.createElement('script');
+    s.src = CASHFREE_SCRIPT;
+    s.async = true;
+    s.onload = () => resolve(window.Cashfree);
+    s.onerror = () => reject(new Error('Failed to load Cashfree'));
+    document.head.appendChild(s);
+  });
+};
 
 const StoragePlans = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [plans, setPlans] = useState([]);
   const [selectedPlanId, setSelectedPlanId] = useState('');
+  const [dialogOpen, setDialogOpen] = useState(false);
   const [period, setPeriod] = useState('month');
   const [storageAmount, setStorageAmount] = useState(1);
   const [loading, setLoading] = useState(false);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+  const paymentReturnHandled = useRef(false);
 
   useEffect(() => {
     (async () => {
@@ -47,6 +70,31 @@ const StoragePlans = () => {
       setPlans(Array.isArray(data) ? data : []);
     })();
   }, []);
+
+  // Handle return from Cashfree: ?order_id=...&payment=success
+  useEffect(() => {
+    const orderId = searchParams.get('order_id');
+    const paymentSuccess = searchParams.get('payment') === 'success';
+    if (!orderId || !paymentSuccess || paymentReturnHandled.current) return;
+    paymentReturnHandled.current = true;
+
+    (async () => {
+      setLoading(true);
+      try {
+        const result = await confirmPaymentSuccess(orderId);
+        setSnackbar({ open: true, message: result.message || 'Payment successful! Storage activated.', severity: 'success' });
+        setDialogOpen(false);
+        setSearchParams({});
+        setTimeout(() => navigate('/', { replace: true }), 2000);
+      } catch (err) {
+        setSnackbar({ open: true, message: err.message || 'Payment confirmation failed', severity: 'error' });
+        setSearchParams({});
+        paymentReturnHandled.current = false;
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [searchParams, navigate, setSearchParams]);
 
   const selectedPlan = selectedPlanId ? plans.find((p) => String(p.id) === String(selectedPlanId)) : null;
   const perGbPlans = plans.filter((p) => p.category === 'per_gb');
@@ -84,7 +132,7 @@ const StoragePlans = () => {
     setStorageAmount(isNaN(v) ? 1 : Math.max(1, v));
   };
 
-  const handlePurchase = async () => {
+  const handlePurchase = useCallback(async () => {
     if (!selectedPlan) {
       setSnackbar({ open: true, message: 'Please select a plan', severity: 'error' });
       return;
@@ -97,23 +145,30 @@ const StoragePlans = () => {
 
     setLoading(true);
     try {
-      const result = await purchaseStorage(
+      const returnUrl = `${window.location.origin}${window.location.pathname}?order_id={order_id}&payment=success`;
+      const result = await createPaymentOrder(
         {
           storage: storageToAdd,
           period: getPeriodToSend(),
           price: getPrice(),
           planId: selectedPlan?.id,
         },
-        user.id
+        returnUrl
       );
-      setSnackbar({ open: true, message: result.message || 'Storage purchased successfully', severity: 'success' });
-      setTimeout(() => navigate('/'), 2000);
+      const Cashfree = await loadCashfree();
+      const mode = result.cashfreeMode || (process.env.NODE_ENV === 'production' ? 'production' : 'sandbox');
+      const cashfree = Cashfree({ mode });
+      await cashfree.checkout({
+        paymentSessionId: result.paymentSessionId,
+        returnUrl: result.returnUrl,
+      });
+      setDialogOpen(false);
     } catch (error) {
-      setSnackbar({ open: true, message: error.message || 'Purchase failed', severity: 'error' });
+      setSnackbar({ open: true, message: error.message || 'Payment failed', severity: 'error' });
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedPlan, period, storageAmount, perGbPlanForPeriod]);
 
   return (
     <Container maxWidth="lg" sx={{ px: { xs: 1, sm: 2, md: 3 } }}>
@@ -149,7 +204,13 @@ const StoragePlans = () => {
                       '&:hover': { boxShadow: 6 },
                     }}
                   >
-                    <CardActionArea onClick={() => setSelectedPlanId(String(p.id))} sx={{ p: 2, textAlign: 'left' }}>
+                    <CardActionArea
+                      onClick={() => {
+                        setSelectedPlanId(String(p.id));
+                        setDialogOpen(true);
+                      }}
+                      sx={{ p: 2, textAlign: 'left' }}
+                    >
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
                         <StorageIcon color="primary" />
                         <Chip label={p.category === 'per_gb' ? 'Per GB' : 'Fixed'} size="small" color={p.category === 'per_gb' ? 'secondary' : 'primary'} />
@@ -175,75 +236,87 @@ const StoragePlans = () => {
             )}
           </Grid>
 
-          {/* Selection summary and purchase — like studio */}
-          {selectedPlan && (
-            <Grow in>
-              <Paper elevation={4} sx={{ p: { xs: 2, sm: 3 }, borderRadius: 2 }}>
-                <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold' }}>
-                  Your selection
-                </Typography>
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'center', mb: 2 }}>
-                  <Chip label={selectedPlan.category === 'fixed' ? 'Fixed' : 'Per GB'} color="primary" size="small" />
-                  {selectedPlan.category === 'per_gb' && (
-                    <>
-                      <Tabs value={period} onChange={(e, v) => setPeriod(v)} variant="standard" sx={{ minHeight: 40 }}>
-                        <Tab label="Monthly" value="month" />
-                        <Tab label="Yearly" value="year" />
-                      </Tabs>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <IconButton onClick={handleDecrement} disabled={storageAmount <= 1} color="primary" size="small">
-                          <RemoveIcon />
-                        </IconButton>
-                        <TextField
-                          type="number"
-                          value={storageAmount}
-                          onChange={handleStorageChange}
-                          inputProps={{ min: 1 }}
-                          size="small"
-                          sx={{ width: 80 }}
-                          InputProps={{ endAdornment: <InputAdornment position="end">GB</InputAdornment> }}
-                        />
-                        <IconButton onClick={handleIncrement} color="primary" size="small">
-                          <AddIcon />
-                        </IconButton>
-                      </Box>
-                    </>
-                  )}
-                </Box>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-                  <CheckCircle color="success" fontSize="small" />
-                  <Typography variant="body2">
-                    {getStorageToPurchase()} GB · {getPeriodToSend() === 'year' ? '12 months' : '1 month'} · Instant activation
-                  </Typography>
-                </Box>
-                <Box sx={{ textAlign: 'center', py: 2, px: 2, bgcolor: 'primary.light', color: 'primary.contrastText', borderRadius: 2 }}>
-                  <Typography variant="h4" fontWeight="bold">
-                    ₹{getPrice()}
-                  </Typography>
-                  <Typography variant="body2">
-                    {getPeriodToSend() === 'year' ? 'per year' : 'per month'}
-                  </Typography>
-                </Box>
-                <Button
-                  fullWidth
-                  variant="contained"
-                  size="large"
-                  onClick={handlePurchase}
-                  disabled={loading || getStorageToPurchase() < 1}
-                  startIcon={<AttachMoney />}
-                  sx={{ mt: 2, py: 1.5 }}
-                >
-                  {loading ? 'Processing...' : 'Purchase Now'}
-                </Button>
-              </Paper>
-            </Grow>
-          )}
-
-          {!selectedPlan && plans.length > 0 && (
+          {plans.length > 0 && (
             <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-              Click a plan above to see price and purchase.
+              Click a plan to open options and purchase.
             </Typography>
           )}
+
+          {/* Plan selection dialog */}
+          <Dialog
+            open={dialogOpen && !!selectedPlan}
+            onClose={() => setDialogOpen(false)}
+            maxWidth="sm"
+            fullWidth
+            PaperProps={{ sx: { borderRadius: 2 } }}
+          >
+            <DialogTitle sx={{ fontWeight: 'bold' }}>
+              Your selection
+            </DialogTitle>
+            <DialogContent>
+              {selectedPlan && (
+                <>
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'center', mb: 2 }}>
+                    <Chip label={selectedPlan.category === 'fixed' ? 'Fixed' : 'Per GB'} color="primary" size="small" />
+                    {selectedPlan.category === 'per_gb' && (
+                      <>
+                        <Tabs value={period} onChange={(e, v) => setPeriod(v)} variant="standard" sx={{ minHeight: 40 }}>
+                          <Tab label="Monthly" value="month" />
+                          <Tab label="Yearly" value="year" />
+                        </Tabs>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <IconButton onClick={handleDecrement} disabled={storageAmount <= 1} color="primary" size="small">
+                            <RemoveIcon />
+                          </IconButton>
+                          <TextField
+                            type="number"
+                            value={storageAmount}
+                            onChange={handleStorageChange}
+                            inputProps={{ min: 1 }}
+                            size="small"
+                            sx={{ width: 80 }}
+                            InputProps={{ endAdornment: <InputAdornment position="end">GB</InputAdornment> }}
+                          />
+                          <IconButton onClick={handleIncrement} color="primary" size="small">
+                            <AddIcon />
+                          </IconButton>
+                        </Box>
+                      </>
+                    )}
+                  </Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                    <CheckCircle color="success" fontSize="small" />
+                    <Typography variant="body2">
+                      {getStorageToPurchase()} GB · {getPeriodToSend() === 'year' ? '12 months' : '1 month'} · Instant activation
+                    </Typography>
+                  </Box>
+                  <Box sx={{ textAlign: 'center', py: 2, px: 2, bgcolor: 'primary.light', color: 'primary.contrastText', borderRadius: 2 }}>
+                    <Typography variant="h4" fontWeight="bold">
+                      ₹{getPrice()}
+                    </Typography>
+                    <Typography variant="body2">
+                      {getPeriodToSend() === 'year' ? 'per year' : 'per month'}
+                    </Typography>
+                  </Box>
+                </>
+              )}
+            </DialogContent>
+            <DialogActions sx={{ px: 3, pb: 2, pt: 0, flexWrap: 'wrap', gap: 1 }}>
+              <Button onClick={() => setDialogOpen(false)} color="inherit">
+                Cancel
+              </Button>
+              <Button
+                variant="contained"
+                size="large"
+                onClick={handlePurchase}
+                disabled={loading || !selectedPlan || getStorageToPurchase() < 1}
+                startIcon={<AttachMoney />}
+                sx={{ py: 1.25 }}
+              >
+                {loading ? 'Processing...' : 'Purchase Now'}
+              </Button>
+            </DialogActions>
+          </Dialog>
         </Box>
       </Fade>
 

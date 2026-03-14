@@ -66,7 +66,40 @@ export const getUserStorage = async (userId) => {
   }
 };
 
-/** Purchase storage (requires auth). planData: { storage, period, price, planId } */
+/** Create Cashfree payment order (requires auth). Returns paymentSessionId for checkout. planData: { storage, period, price, planId }, returnUrl optional. */
+export const createPaymentOrder = async (planData, returnUrl) => {
+  const body = {
+    storage: planData.storage,
+    period: planData.period,
+    price: planData.price,
+  };
+  if (planData.planId != null) body.planId = planData.planId;
+  if (returnUrl) body.returnUrl = returnUrl;
+  const res = await axios.post('/storage/create-order', body);
+  const data = res.data;
+  if (data && data.success) {
+    return {
+      success: true,
+      orderId: data.orderId,
+      paymentSessionId: data.paymentSessionId,
+      returnUrl: data.returnUrl,
+      cashfreeMode: data.cashfreeMode,
+    };
+  }
+  throw new Error(data?.message || 'Failed to create order');
+};
+
+/** Confirm payment success and fulfill storage (requires auth). Call after Cashfree redirect. */
+export const confirmPaymentSuccess = async (orderId) => {
+  const res = await axios.post('/storage/payment-success', { order_id: orderId });
+  const data = res.data;
+  if (data && data.success) {
+    return { success: true, message: data.message || 'Storage purchased successfully', storage: data.storage };
+  }
+  throw new Error(data?.message || 'Payment confirmation failed');
+};
+
+/** Purchase storage directly without gateway (requires auth). planData: { storage, period, price, planId } */
 export const purchaseStorage = async (planData, userId) => {
   try {
     const body = {

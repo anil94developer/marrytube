@@ -77,18 +77,25 @@ export const updateMedia = async (mediaId, { name, folderId }) => {
   return res.data;
 };
 
+/** Move media to another folder on same drive (single UPDATE, no copy). */
+export const moveMediaToFolder = async (mediaId, folderId) => {
+  const body = { folderId: folderId != null ? folderId : null };
+  const res = await axios.patch(`/media/${mediaId}`, body);
+  return res.data;
+};
+
 /** Copy media to same or another folder (same drive). */
 export const copyMedia = async (mediaId, folderId = null) => {
   const res = await axios.post(`/media/${mediaId}/copy`, { folderId });
   return res.data;
 };
 
-/** Get media list for logged-in user. category, folderId, userPlanId ('default' or plan id) */
+/** Get media list for logged-in user. category, folderId, userPlanId ('default' or plan id). Pass folderId=null for root (sends '' so backend returns only root-level media). */
 export const getMediaList = async (userId, category = null, folderId = null, userPlanId = null) => {
   try {
     const params = {};
     if (category) params.category = category;
-    if (folderId !== undefined && folderId !== null) params.folderId = folderId;
+    if (folderId !== undefined) params.folderId = folderId === null ? '' : folderId;
     if (userPlanId !== undefined && userPlanId !== null) params.userPlanId = userPlanId;
     const res = await axios.get('/media/list', { params });
     return Array.isArray(res.data) ? res.data : [];

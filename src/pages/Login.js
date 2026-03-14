@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Container,
@@ -14,13 +14,14 @@ import {
   Fade,
   Slide,
 } from '@mui/material';
-import { Phone, Email, Lock, Refresh } from '@mui/icons-material';
+import { Phone, Email, Refresh } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 import { sendOTP, verifyOTP } from '../services/authService';
 import logo from '../assets/logo_512.png';
 
 const accent = '#c45c5c';
 const bgGradient = 'linear-gradient(165deg, #fdf8f6 0%, #f5ebe6 50%, #ede4df 100%)';
+const OTP_LENGTH = 6;
 
 const Login = () => {
   const [tabValue, setTabValue] = useState(0);
@@ -32,6 +33,7 @@ const Login = () => {
   const [success, setSuccess] = useState('');
   const [timer, setTimer] = useState(0); // Timer in seconds
   const [resendLoading, setResendLoading] = useState(false);
+  const otpInputRefs = useRef([]);
   const navigate = useNavigate();
   const { login, user, loading: authLoading } = useAuth();
 
@@ -304,27 +306,58 @@ const Login = () => {
               </Box>
             ) : (
               <Box>
-                <TextField
-                  fullWidth
-                  label="Enter OTP"
-                  type="text"
-                  value={otp}
-                  onChange={(e) => setOtp(e.target.value)}
-                  placeholder="123456"
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5, textAlign: 'center' }}>
+                  Enter verification code
+                </Typography>
+                <Box
                   sx={{
+                    display: 'flex',
+                    gap: 1,
+                    justifyContent: 'center',
                     mb: 2,
-                    '& .MuiOutlinedInput-root': {
-                      borderRadius: 2,
-                      bgcolor: 'rgba(255,255,255,0.8)',
-                      '&.Mui-focused fieldset': { borderColor: accent },
-                    },
-                    '& .MuiInputLabel-root.Mui-focused': { color: accent },
                   }}
-                  disabled={loading}
-                  InputProps={{
-                    startAdornment: <Lock sx={{ mr: 1, color: 'text.secondary', fontSize: 20 }} />,
-                  }}
-                />
+                >
+                  {Array.from({ length: OTP_LENGTH }, (_, i) => (
+                    <TextField
+                      key={i}
+                      inputRef={(el) => { otpInputRefs.current[i] = el; }}
+                      value={otp[i] ?? ''}
+                      onChange={(e) => {
+                        const v = e.target.value.replace(/\D/g, '').slice(-1);
+                        const next = otp.slice(0, i) + v + otp.slice(i + 1).slice(0, OTP_LENGTH - i - 1);
+                        setOtp(next);
+                        if (v && i < OTP_LENGTH - 1) otpInputRefs.current[i + 1]?.focus();
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Backspace' && !otp[i] && i > 0) {
+                          setOtp((prev) => prev.slice(0, i - 1) + prev.slice(i));
+                          otpInputRefs.current[i - 1]?.focus();
+                        }
+                      }}
+                      onPaste={(e) => {
+                        e.preventDefault();
+                        const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, OTP_LENGTH);
+                        setOtp(pasted);
+                        const nextIdx = Math.min(pasted.length, OTP_LENGTH - 1);
+                        otpInputRefs.current[nextIdx]?.focus();
+                      }}
+                      inputProps={{
+                        maxLength: 1,
+                        style: { textAlign: 'center', fontSize: '1.25rem', fontWeight: 600 },
+                      }}
+                      sx={{
+                        width: { xs: 44, sm: 52 },
+                        '& .MuiOutlinedInput-root': {
+                          borderRadius: 2,
+                          bgcolor: 'rgba(255,255,255,0.8)',
+                          '&.Mui-focused fieldset': { borderColor: accent, borderWidth: 2 },
+                          '& fieldset': { borderWidth: 1.5 },
+                        },
+                      }}
+                      disabled={loading}
+                    />
+                  ))}
+                </Box>
 
                 <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   {timer > 0 ? (
