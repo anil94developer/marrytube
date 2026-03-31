@@ -31,6 +31,12 @@ export const getMyPlans = async () => {
   return Array.isArray(res.data) ? res.data : [];
 };
 
+/** Get current user's transactions (purchase history). Returns { transactions, total }. */
+export const getTransactions = async (params = {}) => {
+  const res = await axios.get('/storage/transactions', { params: { limit: params.limit || 50, offset: params.offset || 0 } });
+  return res.data || { transactions: [], total: 0 };
+};
+
 /** Move media between drives. Optional toFolderId = folder on destination drive. */
 export const moveMediaBetweenDrives = async (fromUserPlanId, toUserPlanId, mediaIds = null, toFolderId = null) => {
   const body = { fromUserPlanId: String(fromUserPlanId), toUserPlanId: String(toUserPlanId) };

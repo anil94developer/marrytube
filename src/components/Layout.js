@@ -25,6 +25,7 @@ import {
   CloudUpload as CloudUploadIcon,
   Storage as StorageIcon,
   VideoLibrary as VideoLibraryIcon,
+  Receipt as ReceiptIcon,
   HelpOutline as HelpIcon,
   AccountCircle,
   Logout,
@@ -48,6 +49,7 @@ const Layout = () => {
     // { text: 'Upload Media', icon: <CloudUploadIcon />, path: '/upload' },
     { text: 'My Media', icon: <VideoLibraryIcon />, path: '/media' },
     { text: 'Storage Plans', icon: <StorageIcon />, path: '/storage-plans' },
+    { text: 'Transactions', icon: <ReceiptIcon />, path: '/transactions' },
     { text: 'How to use', icon: <HelpIcon />, path: '/how-to-use' },
   ];
 

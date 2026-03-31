@@ -150,11 +150,19 @@ const ShareView = () => {
                       color="inherit"
                       sx={{ display: 'block', height: '100%' }}
                     >
-                      <CardContent sx={{ textAlign: 'center', p: 2, '&:hover': { bgcolor: 'action.hover' } }}>
-                        {isVideo ? <VideoIcon sx={{ fontSize: 48, color: 'primary.main' }} /> : <ImageIcon sx={{ fontSize: 48, color: 'secondary.main' }} />}
-                        <Typography variant="body2" noWrap sx={{ mt: 1 }}>{m.name}</Typography>
-                        <Typography variant="caption" color="text.secondary">{(m.size / (1024 * 1024)).toFixed(2)} MB</Typography>
-                        <Typography variant="caption" display="block" color="primary.main" sx={{ mt: 0.5 }}>Open file →</Typography>
+                      <CardContent sx={{ textAlign: 'center', p: 0, '&:hover': { bgcolor: 'action.hover' } }}>
+                        <Box sx={{ width: '100%', height: 120, bgcolor: 'grey.200', overflow: 'hidden' }}>
+                          {isVideo ? (
+                            <Box component="video" src={url} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} muted />
+                          ) : (
+                            <Box component="img" src={url} alt={m.name} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          )}
+                        </Box>
+                        <Box sx={{ p: 2 }}>
+                          <Typography variant="body2" noWrap>{m.name}</Typography>
+                          <Typography variant="caption" color="text.secondary">{(m.size / (1024 * 1024)).toFixed(2)} MB</Typography>
+                          <Typography variant="caption" display="block" color="primary.main" sx={{ mt: 0.5 }}>Open file →</Typography>
+                        </Box>
                       </CardContent>
                     </Link>
                   </Card>

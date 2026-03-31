@@ -393,9 +393,9 @@ const StudioDriveDetail = () => {
                         />
                         <ListItemIcon sx={{ minWidth: 44 }}>
                           {item.category === 'video' ? (
-                            <VideoLibraryIcon sx={{ color: 'primary.main', fontSize: 36 }} />
+                            <Box component="video" src={getMediaUrl(item.url)} sx={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 1 }} muted />
                           ) : (
-                            <ImageIcon sx={{ color: 'secondary.main', fontSize: 36 }} />
+                            <Box component="img" src={getMediaUrl(item.url)} alt={item.name} sx={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 1 }} />
                           )}
                         </ListItemIcon>
                         <ListItemText
@@ -436,17 +436,16 @@ const StudioDriveDetail = () => {
                               sx={{ bgcolor: 'background.paper', borderRadius: 1 }}
                             />
                           </Box>
-                          <CardActionArea
-                            sx={{ height: '100%', p: 2 }}
-                            onClick={() => setPreviewMedia(item)}
-                          >
-                            <CardContent sx={{ textAlign: 'center', p: 2, pt: 4 }}>
+                          <CardActionArea sx={{ height: '100%', p: 0 }} onClick={() => setPreviewMedia(item)}>
+                            <Box sx={{ width: '100%', height: 120, bgcolor: 'grey.200', borderRadius: '8px 8px 0 0', overflow: 'hidden' }}>
                               {item.category === 'video' ? (
-                                <VideoLibraryIcon sx={{ fontSize: gridConfig.iconSize, color: 'primary.main' }} />
+                                <Box component="video" src={getMediaUrl(item.url)} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} muted />
                               ) : (
-                                <ImageIcon sx={{ fontSize: gridConfig.iconSize, color: 'secondary.main' }} />
+                                <Box component="img" src={getMediaUrl(item.url)} alt={item.name} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                               )}
-                              <Typography variant={gridConfig.titleVariant} sx={{ mt: 1, fontWeight: 600 }} noWrap>
+                            </Box>
+                            <CardContent sx={{ textAlign: 'center', p: 2 }}>
+                              <Typography variant={gridConfig.titleVariant} sx={{ fontWeight: 600 }} noWrap>
                                 {item.name}
                               </Typography>
                               <Typography variant="caption" color="text.secondary" display="block">

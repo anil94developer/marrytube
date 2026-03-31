@@ -44,6 +44,7 @@ import {
 } from '@mui/icons-material';
 import { getAdminUserById, getAllMedia } from '../../services/adminService';
 import { formatStorageGB, formatStorageWithUnits } from '../../utils/storageFormat';
+import { getMediaUrl } from '../../config/api';
 
 const AdminUserDetail = () => {
   const { id } = useParams();
@@ -217,8 +218,12 @@ const AdminUserDetail = () => {
                 <List dense>
                   {filteredMedia.map((item) => (
                     <ListItem key={item.id}>
-                      <ListItemIcon>
-                        {item.category === 'video' ? <VideoLibraryIcon color="primary" /> : <ImageIcon color="secondary" />}
+                      <ListItemIcon sx={{ minWidth: 44 }}>
+                        {item.category === 'video' ? (
+                          <Box component="video" src={getMediaUrl(item.url)} sx={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 1 }} muted />
+                        ) : (
+                          <Box component="img" src={getMediaUrl(item.url)} alt={item.name} sx={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 1 }} />
+                        )}
                       </ListItemIcon>
                       <ListItemText primary={item.name} secondary={`${(item.size / (1024 * 1024)).toFixed(2)} MB · ${new Date(item.uploadDate || item.createdAt).toLocaleString()}`} />
                     </ListItem>
@@ -229,9 +234,15 @@ const AdminUserDetail = () => {
                   {filteredMedia.map((item) => (
                     <Grid item xs={6} sm={4} md={3} key={item.id}>
                       <Card variant="outlined">
+                        <Box sx={{ width: '100%', height: 120, bgcolor: 'grey.200', overflow: 'hidden' }}>
+                          {item.category === 'video' ? (
+                            <Box component="video" src={getMediaUrl(item.url)} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} muted />
+                          ) : (
+                            <Box component="img" src={getMediaUrl(item.url)} alt={item.name} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          )}
+                        </Box>
                         <CardContent sx={{ textAlign: 'center', py: 2 }}>
-                          {item.category === 'video' ? <VideoLibraryIcon sx={{ fontSize: 48, color: 'primary.main' }} /> : <ImageIcon sx={{ fontSize: 48, color: 'secondary.main' }} />}
-                          <Typography variant="body2" noWrap sx={{ mt: 1 }}>{item.name}</Typography>
+                          <Typography variant="body2" noWrap>{item.name}</Typography>
                           <Typography variant="caption" color="text.secondary">{(item.size / (1024 * 1024)).toFixed(2)} MB</Typography>
                         </CardContent>
                       </Card>

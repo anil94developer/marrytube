@@ -6,6 +6,7 @@ import AdminLogin from './pages/AdminLogin';
 import StudioLogin from './pages/StudioLogin';
 import Dashboard from './pages/Dashboard';
 import StoragePlans from './pages/StoragePlans';
+import Transactions from './pages/Transactions';
 import MediaUpload from './pages/MediaUpload';
 import MediaList from './pages/MediaList';
 import MediaDriveDetail from './pages/MediaDriveDetail';
@@ -84,6 +85,7 @@ function App() {
         >
           <Route index element={<Dashboard />} />
           <Route path="storage-plans" element={<StoragePlans />} />
+          <Route path="transactions" element={<Transactions />} />
           <Route path="upload" element={<MediaUpload />} />
           <Route path="media" element={<MediaList />} />
           <Route path="media/drive/:planId" element={<MediaDriveDetail />} />

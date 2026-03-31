@@ -82,10 +82,10 @@ const StoragePlans = () => {
       setLoading(true);
       try {
         const result = await confirmPaymentSuccess(orderId);
-        setSnackbar({ open: true, message: result.message || 'Payment successful! Storage activated.', severity: 'success' });
         setDialogOpen(false);
         setSearchParams({});
-        setTimeout(() => navigate('/', { replace: true }), 2000);
+        navigate('/', { replace: true });
+        setSnackbar({ open: true, message: result.message || 'Payment successful! Storage activated.', severity: 'success' });
       } catch (err) {
         setSnackbar({ open: true, message: err.message || 'Payment confirmation failed', severity: 'error' });
         setSearchParams({});
@@ -145,7 +145,11 @@ const StoragePlans = () => {
 
     setLoading(true);
     try {
-      const returnUrl = `${window.location.origin}${window.location.pathname}?order_id={order_id}&payment=success`;
+      // Use http for localhost so Cashfree redirect works (no SSL error); production keeps https
+      const origin = window.location.origin;
+      const isLocalhost = /localhost|127\.0\.0\.1/i.test(window.location.hostname);
+      const base = isLocalhost ? origin.replace(/^https:/, 'http:') : origin;
+      const returnUrl = `${base}${window.location.pathname}?order_id={order_id}&payment=success`;
       const result = await createPaymentOrder(
         {
           storage: storageToAdd,

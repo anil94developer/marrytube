@@ -40,6 +40,7 @@ import {
   ViewModule as ViewModuleIcon,
 } from '@mui/icons-material';
 import { getAllMedia, deleteMediaAdmin, blockMedia } from '../../services/adminService';
+import { getMediaUrl } from '../../config/api';
 
 const PAGE_SIZE = 50;
 
@@ -178,21 +179,13 @@ const AdminMedia = () => {
                   <Grid item xs={6} sm={6} md={4} lg={3} key={item.id}>
                     <Grow in timeout={300 + index * 100}>
                       <Card>
-                        <CardMedia
-                          sx={{
-                            height: 200,
-                            bgcolor: item.category === 'video' ? 'primary.light' : 'secondary.light',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                          }}
-                        >
+                        <Box sx={{ height: 200, bgcolor: 'grey.200', overflow: 'hidden' }}>
                           {item.category === 'video' ? (
-                            <PlayIcon sx={{ fontSize: 60, color: 'primary.main' }} />
+                            <Box component="video" src={getMediaUrl(item.url)} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} muted />
                           ) : (
-                            <ViewIcon sx={{ fontSize: 60, color: 'secondary.main' }} />
+                            <Box component="img" src={getMediaUrl(item.url)} alt={item.name} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                           )}
-                        </CardMedia>
+                        </Box>
                         <CardContent>
                           <Typography variant="subtitle1" noWrap sx={{ fontWeight: 'bold' }}>
                             {item.name}

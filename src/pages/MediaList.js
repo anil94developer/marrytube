@@ -51,8 +51,9 @@ import {
 import { useDropzone } from 'react-dropzone';
 import { useAuth } from '../contexts/AuthContext';
 import { getMyPlans, moveMediaBetweenDrives } from '../services/storageService';
-import { getMediaList, uploadMediaForUser, getFoldersForUser, createFolderForUser, createShare } from '../services/mediaService';
+import { getMediaList, uploadMediaSmart, getFoldersForUser, createFolderForUser, createShare } from '../services/mediaService';
 import { formatStorageWithUnits } from '../utils/storageFormat';
+import { getMediaUrl } from '../config/api';
 
 const BYTES_PER_GB = 1024 * 1024 * 1024;
 
@@ -216,7 +217,7 @@ const MediaList = () => {
     let lastError = null;
     for (const item of uploadFiles) {
       try {
-        await uploadMediaForUser({
+        await uploadMediaSmart({
           file: item.file,
           userPlanId: planId,
           folderId: selectedFolder || null,
@@ -224,8 +225,9 @@ const MediaList = () => {
         success++;
       } catch (e) {
         failCount++;
-        lastError = e?.response?.data?.message || e?.message || 'Upload failed';
-        console.error(e);
+        const data = e?.response?.data;
+        lastError = data?.message || data?.error || e?.message || 'Upload failed';
+        console.error('Upload error:', e?.response?.status, data, e);
       }
     }
     setUploading(false);
@@ -554,7 +556,13 @@ const MediaList = () => {
                           />
                         }
                       >
-                        <ListItemIcon>{item.category === 'video' ? <VideoLibraryIcon /> : <ImageIcon />}</ListItemIcon>
+                        <ListItemIcon sx={{ minWidth: 44 }}>
+                          {item.category === 'video' ? (
+                            <Box component="video" src={getMediaUrl(item.url)} sx={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 1 }} muted />
+                          ) : (
+                            <Box component="img" src={getMediaUrl(item.url)} alt={item.name} sx={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 1 }} />
+                          )}
+                        </ListItemIcon>
                         <ListItemText primary={item.name} secondary={item.size ? `${(item.size / 1024 / 1024).toFixed(2)} MB` : ''} />
                       </ListItem>
                     ))

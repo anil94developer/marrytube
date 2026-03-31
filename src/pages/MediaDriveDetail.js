@@ -65,7 +65,7 @@ import {
   deleteMedia,
   getFoldersForUser,
   createFolderForUser,
-  uploadMediaForUser,
+  uploadMediaSmart,
   updateFolder,
   updateMedia,
   moveMediaToFolder,
@@ -77,6 +77,8 @@ import {
 } from '../services/mediaService';
 import { moveMediaBetweenDrives, copyMediaToDrive } from '../services/storageService';
 import { formatStorageWithUnits } from '../utils/storageFormat';
+import { getMediaUrl } from '../config/api';
+import UploadProgressRow from '../components/UploadProgressRow';
 
 const DATE_FILTERS = [
   { value: 'all', label: 'All Time' },
@@ -115,6 +117,8 @@ const MediaDriveDetail = () => {
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [uploadFiles, setUploadFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState({});
+  const uploadAbortRef = React.useRef({});
   const [selectedFolder, setSelectedFolder] = useState('');
   const [folders, setFolders] = useState([]);
   const [uploadDialogFolders, setUploadDialogFolders] = useState([]);
@@ -405,6 +409,11 @@ const MediaDriveDetail = () => {
     }
   };
 
+  const handleUploadCancel = (itemId) => {
+    const controller = uploadAbortRef.current[itemId];
+    if (controller) controller.abort();
+  };
+
   const handleUploadSubmit = async () => {
     if (!plan || uploadFiles.length === 0) return;
     const userPlanId = plan.id === 'default' ? 'default' : plan.id;
@@ -417,21 +426,45 @@ const MediaDriveDetail = () => {
     let success = 0;
     let failCount = 0;
     let lastError = null;
+    uploadFiles.forEach((it) => setUploadProgress((p) => ({ ...p, [it.id]: { percent: 0, status: 'waiting' } })));
     for (const item of uploadFiles) {
+      setUploadProgress((p) => ({ ...p, [item.id]: { percent: 0, speed: 0, eta: null, status: 'uploading' } }));
+      const controller = new AbortController();
+      uploadAbortRef.current[item.id] = controller;
       try {
-        await uploadMediaForUser({
+        await uploadMediaSmart({
           file: item.file,
           userPlanId,
           folderId: selectedFolder || null,
+          onProgress: (ev) => {
+            setUploadProgress((prev) => ({
+              ...prev,
+              [item.id]: {
+                percent: ev.percent ?? 0,
+                speed: ev.speed ?? 0,
+                eta: ev.eta,
+                status: 'uploading',
+              },
+            }));
+          },
+          signal: controller.signal,
         });
+        setUploadProgress((p) => ({ ...p, [item.id]: { percent: 100, status: 'done' } }));
         success++;
       } catch (e) {
-        failCount++;
-        lastError = e?.response?.data?.message || e?.message || 'Upload failed';
+        if (e?.message === 'Upload cancelled' || e?.name === 'AbortError') {
+          setUploadProgress((p) => ({ ...p, [item.id]: { status: 'cancelled' } }));
+        } else {
+          failCount++;
+          lastError = e?.response?.data?.message || e?.message || 'Upload failed';
+          setUploadProgress((p) => ({ ...p, [item.id]: { status: 'error' } }));
+        }
         console.error(e);
       }
+      delete uploadAbortRef.current[item.id];
     }
     setUploading(false);
+    setUploadProgress({});
     setUploadFiles([]);
     setUploadDialogOpen(false);
     try {
@@ -571,7 +604,7 @@ const MediaDriveDetail = () => {
               variant="contained"
               size="small"
               startIcon={<AddIcon />}
-              onClick={() => setUploadDialogOpen(true)}
+              onClick={() => navigate('/media')}
               disabled={getAvailableGB(plan) <= 0}
               title={getAvailableGB(plan) <= 0 ? 'No space in this drive' : ''}
             >
@@ -809,9 +842,9 @@ const MediaDriveDetail = () => {
                       />
                       <ListItemIcon sx={{ minWidth: 44 }}>
                         {item.category === 'video' ? (
-                          <VideoLibraryIcon sx={{ color: 'primary.main', fontSize: 36 }} />
+                          <Box component="video" src={getMediaUrl(item.url)} sx={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 1 }} muted />
                         ) : (
-                          <ImageIcon sx={{ color: 'secondary.main', fontSize: 36 }} />
+                          <Box component="img" src={getMediaUrl(item.url)} alt={item.name} sx={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 1 }} />
                         )}
                       </ListItemIcon>
                       <ListItemText
@@ -852,14 +885,16 @@ const MediaDriveDetail = () => {
                               sx={{ bgcolor: 'background.paper', borderRadius: 1 }}
                             />
                           </Box>
-                          <CardActionArea sx={{ height: '100%', p: 2 }} onClick={() => navigate(`/media/${item.id}`)}>
-                            <CardContent sx={{ textAlign: 'center', p: 2, pt: 4 }}>
+                          <CardActionArea sx={{ height: '100%', p: 0 }} onClick={() => navigate(`/media/${item.id}`)}>
+                            <Box sx={{ width: '100%', height: 120, bgcolor: 'grey.200', borderRadius: '8px 8px 0 0', overflow: 'hidden' }}>
                               {item.category === 'video' ? (
-                                <VideoLibraryIcon sx={{ fontSize: gridConfig.iconSize, color: 'primary.main' }} />
+                                <Box component="video" src={getMediaUrl(item.url)} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} muted />
                               ) : (
-                                <ImageIcon sx={{ fontSize: gridConfig.iconSize, color: 'secondary.main' }} />
+                                <Box component="img" src={getMediaUrl(item.url)} alt={item.name} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                               )}
-                              <Typography variant={gridConfig.titleVariant} sx={{ mt: 1, fontWeight: 600 }} noWrap>
+                            </Box>
+                            <CardContent sx={{ textAlign: 'center', p: 2 }}>
+                              <Typography variant={gridConfig.titleVariant} sx={{ fontWeight: 600 }} noWrap>
                                 {item.name}
                               </Typography>
                               <Typography variant="caption" color="text.secondary" display="block">
@@ -982,14 +1017,34 @@ const MediaDriveDetail = () => {
               </Box>
             </Paper>
             {uploadFiles.length > 0 && (
-              <List dense>
-                {uploadFiles.map((item) => (
-                  <ListItem key={item.id} secondaryAction={<Button size="small" onClick={() => removeUploadFile(item.id)}>Remove</Button>}>
-                    <ListItemIcon>{item.category === 'video' ? <VideoLibraryIcon /> : <ImageIcon />}</ListItemIcon>
-                    <ListItemText primary={item.file.name} secondary={`${(item.file.size / 1024 / 1024).toFixed(2)} MB`} />
-                  </ListItem>
-                ))}
-              </List>
+              <>
+                <List dense>
+                  {uploadFiles.map((item) => {
+                    const progress = uploadProgress[item.id];
+                    const isUploading = progress?.status === 'uploading';
+                    if (uploading && (progress?.status === 'uploading' || progress?.status === 'waiting' || progress?.status === 'done')) {
+                      return (
+                        <UploadProgressRow
+                          key={item.id}
+                          item={item}
+                          progress={progress}
+                          onCancel={handleUploadCancel}
+                          showCancel={isUploading}
+                        />
+                      );
+                    }
+                    return (
+                      <ListItem key={item.id} secondaryAction={!uploading ? <Button size="small" onClick={() => removeUploadFile(item.id)}>Remove</Button> : null}>
+                        <ListItemIcon>{item.category === 'video' ? <VideoLibraryIcon /> : <ImageIcon />}</ListItemIcon>
+                        <ListItemText primary={item.file.name} secondary={`${(item.file.size / 1024 / 1024).toFixed(2)} MB`} />
+                      </ListItem>
+                    );
+                  })}
+                </List>
+                <Typography variant="caption" color="text.secondary" display="block" sx={{ px: 2, pb: 1 }}>
+                  Files &gt;10 MB upload in 5 MB chunks with progress. Supports up to 50 GB.
+                </Typography>
+              </>
             )}
           </Box>
         </DialogContent>

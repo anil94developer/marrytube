@@ -40,7 +40,7 @@ import {
   CreateNewFolder as CreateFolderIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
-import { getFolders, createFolder, uploadMediaForClient } from '../../services/mediaService';
+import { getFolders, createFolder, uploadMediaForClientSmart } from '../../services/mediaService';
 import { formatStorageGB } from '../../utils/storageFormat';
 
 const StudioUpload = (props) => {
@@ -185,10 +185,14 @@ const StudioUpload = (props) => {
     setUploading(true);
     const uploadPromises = files.map(async (fileItem) => {
       try {
-        const data = await uploadMediaForClient(clientId, {
+        const data = await uploadMediaForClientSmart({
+          clientId,
           file: fileItem.file,
           userPlanId: selectedUserPlanId,
           folderId: selectedFolder || null,
+          onProgress: ({ percent }) => {
+            setUploadProgress((prev) => ({ ...prev, [fileItem.id]: Math.max(0, Math.min(100, percent || 0)) }));
+          },
         });
         return { id: fileItem.id, success: true, planStorage: data?.planStorage };
       } catch (error) {

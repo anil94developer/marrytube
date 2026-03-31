@@ -581,9 +581,9 @@ const StudioClientDetails = () => {
                                       >
                                         <ListItemIcon sx={{ minWidth: 36 }}>
                                           {item.category === 'video' ? (
-                                            <VideoLibraryIcon sx={{ color: 'primary.main', fontSize: 28 }} />
+                                            <Box component="video" src={getMediaUrl(item.url)} sx={{ width: 32, height: 32, objectFit: 'cover', borderRadius: 1 }} muted />
                                           ) : (
-                                            <ImageIcon sx={{ color: 'secondary.main', fontSize: 28 }} />
+                                            <Box component="img" src={getMediaUrl(item.url)} alt={item.name} sx={{ width: 32, height: 32, objectFit: 'cover', borderRadius: 1 }} />
                                           )}
                                         </ListItemIcon>
                                         <ListItemText primary={item.name} secondary={item.size ? `${(item.size / (1024 * 1024)).toFixed(2)} MB` : ''} />
@@ -884,13 +884,15 @@ const StudioClientDetails = () => {
                       <Grid item xs={12} sm={6} md={4} lg={3} key={item.id}>
                         <Grow in timeout={300 + index * 100}>
                           <Card sx={{ cursor: 'pointer' }} onClick={() => setPreviewMedia(item)}>
-                            <CardContent>
+                            <Box sx={{ width: '100%', height: 120, bgcolor: 'grey.200', overflow: 'hidden' }}>
                               {item.category === 'video' ? (
-                                <VideoLibraryIcon sx={{ fontSize: 60, color: 'primary.main' }} />
+                                <Box component="video" src={getMediaUrl(item.url)} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} muted />
                               ) : (
-                                <ImageIcon sx={{ fontSize: 60, color: 'secondary.main' }} />
+                                <Box component="img" src={getMediaUrl(item.url)} alt={item.name} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                               )}
-                              <Typography variant="subtitle1" noWrap sx={{ mt: 1, fontWeight: 'bold' }}>
+                            </Box>
+                            <CardContent>
+                              <Typography variant="subtitle1" noWrap sx={{ fontWeight: 'bold' }}>
                                 {item.name}
                               </Typography>
                             </CardContent>
@@ -903,11 +905,11 @@ const StudioClientDetails = () => {
                   <List>
                     {media.map((item) => (
                       <ListItem key={item.id}>
-                        <ListItemIcon>
+                        <ListItemIcon sx={{ minWidth: 44 }}>
                           {item.category === 'video' ? (
-                            <VideoLibraryIcon sx={{ color: 'primary.main' }} />
+                            <Box component="video" src={getMediaUrl(item.url)} sx={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 1 }} muted />
                           ) : (
-                            <ImageIcon sx={{ color: 'secondary.main' }} />
+                            <Box component="img" src={getMediaUrl(item.url)} alt={item.name} sx={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 1 }} />
                           )}
                         </ListItemIcon>
                         <ListItemText primary={item.name} secondary={new Date(item.uploadDate).toLocaleString()} />

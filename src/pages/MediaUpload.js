@@ -37,7 +37,7 @@ import {
   CreateNewFolder as CreateFolderIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
-import { getUploadUrl, saveMedia, getFoldersForUser, createFolderForUser } from '../services/mediaService';
+import { uploadMediaSmart, getFoldersForUser, createFolderForUser } from '../services/mediaService';
 import { getUserStorage } from '../services/storageService';
 import { formatStorageGB } from '../utils/storageFormat';
 
@@ -175,37 +175,15 @@ const MediaUpload = () => {
           return { id: fileItem.id, success: false, error: 'File size exceeds available storage' };
         }
 
-        const { uploadURL, s3Key, url } = await getUploadUrl(
-          fileItem.file.name,
-          fileItem.file.type,
-          fileItem.file.size
-        );
-
-        setUploadProgress((prev) => ({ ...prev, [fileItem.id]: 30 }));
-
-        const putRes = await fetch(uploadURL, {
-          method: 'PUT',
-          body: fileItem.file,
-          headers: { 'Content-Type': fileItem.file.type },
-        });
-        if (!putRes.ok) {
-          throw new Error('Upload to storage failed');
-        }
-
-        setUploadProgress((prev) => ({ ...prev, [fileItem.id]: 80 }));
-
-        await saveMedia({
-          name: fileItem.file.name,
-          url,
-          s3Key,
-          category: fileItem.category,
-          size: fileItem.file.size,
-          mimeType: fileItem.file.type,
+        await uploadMediaSmart({
+          file: fileItem.file,
           folderId: selectedFolder || null,
+          onProgress: ({ percent }) => {
+            setUploadProgress((prev) => ({ ...prev, [fileItem.id]: Math.max(0, Math.min(100, percent || 0)) }));
+          },
         });
 
         currentAvailable -= fileSizeInGB;
-        setUploadProgress((prev) => ({ ...prev, [fileItem.id]: 100 }));
         return { id: fileItem.id, success: true };
       } catch (error) {
         return { id: fileItem.id, success: false, error: error.response?.data?.message || error.message };
