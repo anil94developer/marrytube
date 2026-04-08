@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Container,
   Paper,
@@ -39,6 +39,7 @@ import {
   Checkbox,
   FormGroup,
   FormControlLabel,
+  CircularProgress,
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
@@ -59,17 +60,65 @@ import {
   Update as RenewIcon,
   DriveFileMove as MoveDataIcon,
   OpenInNew as ViewDriveIcon,
+  Share as ShareIcon,
 } from '@mui/icons-material';
 import { BarChart } from '@mui/x-charts/BarChart';
 import { PieChart } from '@mui/x-charts/PieChart';
-import { getClientDetails, purchaseSpaceForClient, getStoragePlans as fetchStoragePlans, purchasePlanForClient, getUserPlans, moveMediaBetweenPlans } from '../../services/studioService';
+import {
+  getClientDetails,
+  getStoragePlans as fetchStoragePlans,
+  getUserPlans,
+  moveMediaBetweenPlans,
+  createStudioClientPaymentOrder,
+  createClientShare,
+} from '../../services/studioService';
+import { getFolders } from '../../services/mediaService';
+import { confirmPaymentSuccess } from '../../services/storageService';
 import { formatStorageWithUnits, formatStorageGB } from '../../utils/storageFormat';
 import { getMediaUrl } from '../../config/api';
 import StudioUpload from './StudioUpload';
 
+const CASHFREE_SCRIPT = 'https://sdk.cashfree.com/js/v3/cashfree.js';
+/** Flat folder list with "Parent / Child" labels for move destination picker */
+function foldersWithPathLabels(folders) {
+  if (!Array.isArray(folders) || folders.length === 0) return [];
+  const byId = {};
+  folders.forEach((f) => {
+    if (f && f.id != null) byId[f.id] = f;
+  });
+  const pathLabel = (f) => {
+    if (!f) return '';
+    if (!f.parentFolderId) return f.name || '';
+    const p = byId[f.parentFolderId];
+    return p ? `${pathLabel(p)} / ${f.name}` : (f.name || '');
+  };
+  return folders
+    .map((f) => ({ ...f, pathLabel: pathLabel(f) }))
+    .sort((a, b) => (a.pathLabel || '').localeCompare(b.pathLabel || ''));
+}
+
+const loadCashfree = () => {
+  if (window.Cashfree) return Promise.resolve(window.Cashfree);
+  return new Promise((resolve, reject) => {
+    if (document.querySelector(`script[src="${CASHFREE_SCRIPT}"]`)) {
+      if (window.Cashfree) resolve(window.Cashfree);
+      else reject(new Error('Cashfree not ready'));
+      return;
+    }
+    const s = document.createElement('script');
+    s.src = CASHFREE_SCRIPT;
+    s.async = true;
+    s.onload = () => resolve(window.Cashfree);
+    s.onerror = () => reject(new Error('Failed to load Cashfree'));
+    document.head.appendChild(s);
+  });
+};
+
 const StudioClientDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const paymentReturnHandled = useRef(false);
   const [clientData, setClientData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [tabValue, setTabValue] = useState(0);
@@ -94,10 +143,13 @@ const StudioClientDetails = () => {
   // Move data dialog: move media from one plan to another
   const [moveDialog, setMoveDialog] = useState({ open: false, sourcePlan: null });
   const [moveToPlanId, setMoveToPlanId] = useState('');
+  const [moveToFolderId, setMoveToFolderId] = useState('');
+  const [moveDestFolders, setMoveDestFolders] = useState([]);
   const [moveLoading, setMoveLoading] = useState(false);
   const [moveSelectedIds, setMoveSelectedIds] = useState([]);
   const [moveFilter, setMoveFilter] = useState('all'); // 'all' | 'video' | 'image' - follows tabValue when dialog opens
   const [previewMedia, setPreviewMedia] = useState(null);
+  const [shareDriveDialog, setShareDriveDialog] = useState({ open: false, plan: null, link: '', loading: false });
 
   const BYTES_PER_GB = 1024 * 1024 * 1024;
   const EXPIRY_NEAR_DAYS = 10;
@@ -121,6 +173,88 @@ const StudioClientDetails = () => {
     loadClientData();
     loadUserPlans();
   }, [id]);
+
+  // Load all folders on destination drive for "Move data" dialog
+  useEffect(() => {
+    if (!moveDialog.open || !moveToPlanId || !id) {
+      setMoveDestFolders([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await getFolders(id, moveToPlanId, undefined);
+        if (!cancelled) setMoveDestFolders(Array.isArray(list) ? list : []);
+      } catch (e) {
+        console.error(e);
+        if (!cancelled) setMoveDestFolders([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [moveDialog.open, moveToPlanId, id]);
+
+  useEffect(() => {
+    setMoveToFolderId('');
+  }, [moveToPlanId]);
+
+  /** Create public view-only share link for the selected drive (same as drive detail page). */
+  useEffect(() => {
+    if (!shareDriveDialog.open || !shareDriveDialog.plan || shareDriveDialog.link) return;
+    const plan = shareDriveDialog.plan;
+    const resourceId = plan.isDefault || plan.id === 'default' ? 0 : Number(plan.id);
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await createClientShare(id, { resourceType: 'drive', resourceId, expiresInDays: 30 });
+        const url = res.shareUrl || `${window.location.origin}/share/${res.token}`;
+        if (!cancelled) setShareDriveDialog((p) => ({ ...p, link: url, loading: false }));
+      } catch (e) {
+        if (!cancelled) {
+          setShareDriveDialog((p) => ({ ...p, link: '', loading: false }));
+          setSnackbar({
+            open: true,
+            message: e?.response?.data?.message || e?.message || 'Failed to create share link',
+            severity: 'error',
+          });
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [shareDriveDialog.open, shareDriveDialog.plan, shareDriveDialog.link, id]);
+
+  const handleShareDrive = (plan) => {
+    setShareDriveDialog({ open: true, plan, link: '', loading: true });
+  };
+
+  // Return from Cashfree: ?order_id=...&payment=success
+  useEffect(() => {
+    const orderId = searchParams.get('order_id');
+    const paymentSuccess = searchParams.get('payment') === 'success';
+    if (!orderId || !paymentSuccess || paymentReturnHandled.current) return;
+    paymentReturnHandled.current = true;
+
+    (async () => {
+      try {
+        await confirmPaymentSuccess(orderId);
+        setSearchParams({}, { replace: true });
+        await loadClientData();
+        await loadUserPlans();
+        setSnackbar({ open: true, message: 'Payment successful! Client plan activated.', severity: 'success' });
+      } catch (err) {
+        setSnackbar({
+          open: true,
+          message: err.message || 'Payment confirmation failed',
+          severity: 'error',
+        });
+        setSearchParams({}, { replace: true });
+        paymentReturnHandled.current = false;
+      }
+    })();
+  }, [searchParams, setSearchParams]);
 
   const loadClientData = async () => {
     try {
@@ -170,43 +304,47 @@ const StudioClientDetails = () => {
       return;
     }
 
-    setPurchaseLoading(true);
-    try {
-      if (selectedPlanId) {
-        const plan = plans.find(p => String(p.id) === String(selectedPlanId));
-        if (!plan) throw new Error('Selected plan not found');
-
-        // Add userId to payload
-        const userId = clientData?.client?.id || clientData?.client?.userId;
-
-        if (plan.category === 'per_gb') {
-          if (storageAmount < 1) throw new Error('Please select at least 1 GB');
-          await purchasePlanForClient(id, { planId: plan.id, storage: storageAmount, period, userId });
-        } else {
-          await purchasePlanForClient(id, { planId: plan.id, period, userId });
-        }
-      } else {
-        await purchaseSpaceForClient(id, {
-          storage: storageAmount,
-          period: period,
-          price: calculatePrice(),
-        });
-      }
-      loadClientData();
-      setPurchaseDialog({ open: false });
-      setStorageAmount(1);
-      setPeriod('month');
-      setSelectedPlanId('');
+    if (!selectedPlanId) {
       setSnackbar({
         open: true,
-        message: `${storageAmount} GB storage purchased successfully for client`,
-        severity: 'success'
+        message: 'Select a storage plan to pay with Cashfree.',
+        severity: 'error',
       });
+      return;
+    }
+
+    setPurchaseLoading(true);
+    try {
+      const plan = plans.find(p => String(p.id) === String(selectedPlanId));
+      if (!plan) throw new Error('Selected plan not found');
+
+      const origin = window.location.origin;
+      const isLocalhost = /localhost|127\.0\.0\.1/i.test(window.location.hostname);
+      const base = isLocalhost ? origin.replace(/^https:/, 'http:') : origin;
+      const returnUrl = `${base}/studio/clients/${id}?order_id={order_id}&payment=success`;
+
+      const planPayload = {
+        planId: plan.id,
+        period: plan.period,
+      };
+      if (plan.category === 'per_gb') {
+        planPayload.storage = storageAmount;
+      }
+
+      const result = await createStudioClientPaymentOrder(id, planPayload, returnUrl);
+      const Cashfree = await loadCashfree();
+      const mode = result.cashfreeMode || (process.env.NODE_ENV === 'production' ? 'production' : 'sandbox');
+      const cashfree = Cashfree({ mode });
+      await cashfree.checkout({
+        paymentSessionId: result.paymentSessionId,
+        returnUrl: result.returnUrl,
+      });
+      setPurchaseDialog({ open: false });
     } catch (error) {
       setSnackbar({
         open: true,
-        message: error.message || 'Failed to purchase storage',
-        severity: 'error'
+        message: error.message || 'Failed to start payment',
+        severity: 'error',
       });
     } finally {
       setPurchaseLoading(false);
@@ -403,7 +541,8 @@ const StudioClientDetails = () => {
                                   variant="contained"
                                   size="small"
                                   startIcon={<AddIcon />}
-                                  onClick={() => {
+                                  onClick={(e) => {
+                                    e.stopPropagation();
                                     if (noSpace) return;
                                     loadUserPlans();
                                     setUploadDialog({ open: true, plan });
@@ -419,7 +558,10 @@ const StudioClientDetails = () => {
                                     color="warning"
                                     size="small"
                                     startIcon={<RenewIcon />}
-                                    onClick={() => setPurchaseDialog({ open: true })}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setPurchaseDialog({ open: true });
+                                    }}
                                   >
                                     Renew
                                   </Button>
@@ -428,14 +570,29 @@ const StudioClientDetails = () => {
                                   variant="outlined"
                                   size="small"
                                   startIcon={<MoveDataIcon />}
-                                  onClick={() => {
+                                  onClick={(e) => {
+                                    e.stopPropagation();
                                     setMoveDialog({ open: true, sourcePlan: plan });
                                     setMoveToPlanId('');
+                                    setMoveToFolderId('');
+                                    setMoveDestFolders([]);
                                     setMoveSelectedIds([]);
                                     setMoveFilter(tabValue === 0 ? 'video' : 'image');
                                   }}
                                 >
                                   Move data
+                                </Button>
+                                <Button
+                                  variant="outlined"
+                                  size="small"
+                                  color="primary"
+                                  startIcon={<ShareIcon />}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleShareDrive(plan);
+                                  }}
+                                >
+                                  Share drive
                                 </Button>
                               </Box>
                             </>
@@ -502,8 +659,12 @@ const StudioClientDetails = () => {
                 {/* Move data: show source media, multi-select, move only selected to chosen drive */}
                 <Dialog
                   open={moveDialog.open}
-                  onClose={() => setMoveDialog({ open: false, sourcePlan: null })}
-                  maxWidth="sm"
+                  onClose={() => {
+                    setMoveDialog({ open: false, sourcePlan: null });
+                    setMoveToFolderId('');
+                    setMoveDestFolders([]);
+                  }}
+                  maxWidth="md"
                   fullWidth
                   TransitionComponent={Fade}
                 >
@@ -607,6 +768,27 @@ const StudioClientDetails = () => {
                                 ))}
                             </Select>
                           </FormControl>
+                          <FormControl fullWidth size="small">
+                            <InputLabel>Destination folder</InputLabel>
+                            <Select
+                              value={moveToFolderId}
+                              label="Destination folder"
+                              onChange={(e) => setMoveToFolderId(e.target.value)}
+                              disabled={!moveToPlanId}
+                            >
+                              <MenuItem value="">
+                                <em>Drive root (top level — no folder)</em>
+                              </MenuItem>
+                              {foldersWithPathLabels(moveDestFolders).map((f) => (
+                                <MenuItem key={f.id} value={String(f.id)}>
+                                  {f.pathLabel || f.name}
+                                </MenuItem>
+                              ))}
+                            </Select>
+                          </FormControl>
+                          <Alert severity="info" sx={{ py: 0.5 }}>
+                            Files are moved into the destination drive and folder you pick. Root shows files that are not inside a folder.
+                          </Alert>
                           {moveToPlanId && (() => {
                             const dest = userPlans.find((p) => p.id === Number(moveToPlanId));
                             const selectedSize = filtered
@@ -641,7 +823,15 @@ const StudioClientDetails = () => {
                     </Box>
                   </DialogContent>
                   <DialogActions>
-                    <Button onClick={() => setMoveDialog({ open: false, sourcePlan: null })}>Cancel</Button>
+                    <Button
+                      onClick={() => {
+                        setMoveDialog({ open: false, sourcePlan: null });
+                        setMoveToFolderId('');
+                        setMoveDestFolders([]);
+                      }}
+                    >
+                      Cancel
+                    </Button>
                     <Button
                       variant="contained"
                       onClick={async () => {
@@ -652,7 +842,8 @@ const StudioClientDetails = () => {
                             id,
                             moveDialog.sourcePlan.id,
                             Number(moveToPlanId),
-                            moveSelectedIds.length > 0 ? moveSelectedIds : null
+                            moveSelectedIds.length > 0 ? moveSelectedIds : null,
+                            moveToFolderId ? Number(moveToFolderId) : undefined
                           );
                           setSnackbar({
                             open: true,
@@ -663,6 +854,8 @@ const StudioClientDetails = () => {
                           });
                           setMoveDialog({ open: false, sourcePlan: null });
                           setMoveToPlanId('');
+                          setMoveToFolderId('');
+                          setMoveDestFolders([]);
                           setMoveSelectedIds([]);
                           loadClientData();
                         } catch (err) {
@@ -1130,6 +1323,55 @@ const StudioClientDetails = () => {
             size="large"
           >
             {purchaseLoading ? 'Processing...' : (selectedPlan && selectedPlan.category === 'fixed' ? `Purchase Plan` : `Purchase Storage`)}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={shareDriveDialog.open}
+        onClose={() => setShareDriveDialog({ open: false, plan: null, link: '', loading: false })}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Share drive</DialogTitle>
+        <DialogContent>
+          {shareDriveDialog.plan && (
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+              {shareDriveDialog.plan.isDefault ? 'Default drive' : `Plan ${shareDriveDialog.plan.totalStorage} GB`}
+            </Typography>
+          )}
+          {shareDriveDialog.loading ? (
+            <Box sx={{ py: 2, textAlign: 'center' }}>
+              <CircularProgress size={32} />
+            </Box>
+          ) : shareDriveDialog.link ? (
+            <Box>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                Anyone with this link can browse folders and files on this drive (read-only). Expires in 30 days.
+              </Typography>
+              <TextField
+                fullWidth
+                size="small"
+                value={shareDriveDialog.link}
+                InputProps={{ readOnly: true }}
+                sx={{ mb: 1 }}
+              />
+              <Button
+                variant="contained"
+                size="small"
+                onClick={() => {
+                  navigator.clipboard.writeText(shareDriveDialog.link);
+                  setSnackbar({ open: true, message: 'Link copied', severity: 'success' });
+                }}
+              >
+                Copy link
+              </Button>
+            </Box>
+          ) : null}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShareDriveDialog({ open: false, plan: null, link: '', loading: false })}>
+            Close
           </Button>
         </DialogActions>
       </Dialog>

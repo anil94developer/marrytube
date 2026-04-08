@@ -44,7 +44,14 @@ const ShareView = () => {
     return () => { cancelled = true; };
   }, [token, currentFolderId]);
 
-  const mediaUrl = (url) => getMediaUrl(url);
+  /** Presigned B2 URLs are absolute; do not prefix with API base (would break signature). */
+  const mediaUrl = (url) => {
+    if (url == null || url === '') return '';
+    const s = typeof url === 'string' ? url.trim() : '';
+    if (!s) return '';
+    if (/^https?:\/\//i.test(s)) return s;
+    return getMediaUrl(s);
+  };
 
   const handleFolderClick = (folder) => {
     setCurrentFolderId(folder.id);

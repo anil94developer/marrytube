@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Container,
@@ -47,7 +47,6 @@ import {
   ViewModule as ViewModuleIcon,
   PlayArrow as PlayIcon,
   Visibility as ViewIcon,
-  Add as AddIcon,
   Delete as DeleteIcon,
   CloudUpload as CloudUploadIcon,
   CreateNewFolder as CreateFolderIcon,
@@ -61,7 +60,7 @@ import { useDropzone } from 'react-dropzone';
 import { useAuth } from '../contexts/AuthContext';
 import { getMyPlans } from '../services/storageService';
 import {
-  getMediaList,
+  getMediaListPaged,
   deleteMedia,
   getFoldersForUser,
   createFolderForUser,
@@ -87,10 +86,23 @@ const DATE_FILTERS = [
   { value: 'month', label: 'Last Month' },
 ];
 
+// MUI Grid is 12 columns: higher xs/sm/md = wider card = fewer items per row ("large").
 const GRID_SIZES = {
-  small: { cols: { xs: 3, sm: 4, md: 6 }, iconSize: 40, titleVariant: 'caption' },
-  medium: { cols: { xs: 2, sm: 3, md: 4 }, iconSize: 56, titleVariant: 'body2' },
-  large: { cols: { xs: 1, sm: 2, md: 3 }, iconSize: 72, titleVariant: 'subtitle1' },
+  small: {
+    cols: { xs: 4, sm: 3, md: 2, lg: 2 },
+    previewHeight: 88,
+    titleVariant: 'caption',
+  },
+  medium: {
+    cols: { xs: 6, sm: 4, md: 3 },
+    previewHeight: 120,
+    titleVariant: 'body2',
+  },
+  large: {
+    cols: { xs: 12, sm: 6, md: 4 },
+    previewHeight: 176,
+    titleVariant: 'subtitle1',
+  },
 };
 
 const PAGE_SIZE = 50;
@@ -103,6 +115,9 @@ const MediaDriveDetail = () => {
   const [plans, setPlans] = useState([]);
   const [plan, setPlan] = useState(null);
   const [media, setMedia] = useState([]);
+  const [driveMediaTotal, setDriveMediaTotal] = useState(0);
+  const [driveTotalOnPlan, setDriveTotalOnPlan] = useState(0);
+  const [mediaListLoading, setMediaListLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [dateFilter, setDateFilter] = useState('all');
@@ -113,6 +128,8 @@ const MediaDriveDetail = () => {
   const [page, setPage] = useState(0);
   const [selectedIds, setSelectedIds] = useState([]);
   const [deleteDialog, setDeleteDialog] = useState({ open: false, mediaId: null, ids: [], name: '' });
+  const [deleteFolderDialog, setDeleteFolderDialog] = useState({ open: false, folderId: null, name: '' });
+  const [deleteFolderLoading, setDeleteFolderLoading] = useState(false);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [uploadFiles, setUploadFiles] = useState([]);
@@ -135,33 +152,74 @@ const MediaDriveDetail = () => {
   const [dragItem, setDragItem] = useState(null);
   const [dropTargetFolderId, setDropTargetFolderId] = useState(null);
 
-  const loadDriveData = useCallback(async () => {
-    setLoading(true);
+  const loadFoldersAndPlan = useCallback(async (options = {}) => {
+    const silent = options.silent === true;
+    if (!silent) setLoading(true);
     try {
-      const [plansData, foldersData, mediaData] = await Promise.all([
+      const [plansData, foldersData] = await Promise.all([
         getMyPlans(),
         getFoldersForUser(currentFolderId, planId),
-        getMediaList(user.id, null, currentFolderId, planId),
       ]);
       setPlans(Array.isArray(plansData) ? plansData : []);
       const p = (plansData || []).find((pl) => String(pl.id) === String(planId));
       setPlan(p || null);
       setFolders(Array.isArray(foldersData) ? foldersData : []);
-      setMedia(Array.isArray(mediaData) ? mediaData : []);
     } catch (e) {
       console.error(e);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
-  }, [planId, user.id, currentFolderId]);
+  }, [planId, user?.id, currentFolderId]);
+
+  const loadDriveMedia = useCallback(async () => {
+    if (!user?.id || planId == null) {
+      setMedia([]);
+      setDriveMediaTotal(0);
+      setDriveTotalOnPlan(0);
+      return;
+    }
+    setMediaListLoading(true);
+    try {
+      const datePreset = dateFilter === 'all' ? undefined : dateFilter;
+      const res = await getMediaListPaged({
+        userPlanId: planId === 'default' ? 'default' : planId,
+        folderId: currentFolderId != null ? String(currentFolderId) : '',
+        page: page + 1,
+        limit: PAGE_SIZE,
+        category: categoryFilter === 'all' ? undefined : categoryFilter,
+        search: searchQuery.trim() || undefined,
+        datePreset,
+        sort: sortOrder === 'asc' ? 'asc' : 'desc',
+      });
+      setMedia(Array.isArray(res.data) ? res.data : []);
+      setDriveMediaTotal(Number(res.total) || 0);
+      setDriveTotalOnPlan(Number(res.totalOnPlan) || 0);
+    } catch (e) {
+      console.error(e);
+      setMedia([]);
+      setDriveMediaTotal(0);
+      setDriveTotalOnPlan(0);
+    } finally {
+      setMediaListLoading(false);
+    }
+  }, [user?.id, planId, currentFolderId, page, categoryFilter, searchQuery, dateFilter, sortOrder]);
 
   useEffect(() => {
-    loadDriveData();
-  }, [loadDriveData]);
+    loadFoldersAndPlan();
+  }, [loadFoldersAndPlan]);
+
+  useEffect(() => {
+    loadDriveMedia();
+  }, [loadDriveMedia]);
+
+  const loadDriveData = useCallback(async (options = {}) => {
+    await loadFoldersAndPlan(options);
+    await loadDriveMedia();
+  }, [loadFoldersAndPlan, loadDriveMedia]);
 
   useEffect(() => {
     setPage(0);
-  }, [searchQuery, dateFilter, categoryFilter, sortOrder]);
+  }, [searchQuery, dateFilter, categoryFilter, sortOrder, currentFolderId]);
 
   useEffect(() => {
     setSelectedIds([]);
@@ -409,6 +467,18 @@ const MediaDriveDetail = () => {
     }
   };
 
+  const handleDeleteFolderDialogConfirm = async () => {
+    const id = deleteFolderDialog.folderId;
+    if (!id) return;
+    setDeleteFolderLoading(true);
+    try {
+      await handleDeleteFolder(id);
+      setDeleteFolderDialog({ open: false, folderId: null, name: '' });
+    } finally {
+      setDeleteFolderLoading(false);
+    }
+  };
+
   const handleUploadCancel = (itemId) => {
     const controller = uploadAbortRef.current[itemId];
     if (controller) controller.abort();
@@ -467,17 +537,8 @@ const MediaDriveDetail = () => {
     setUploadProgress({});
     setUploadFiles([]);
     setUploadDialogOpen(false);
-    try {
-      const [mediaData, plansData] = await Promise.all([
-        getMediaList(user.id, null, null, planId),
-        getMyPlans(),
-      ]);
-      setMedia(Array.isArray(mediaData) ? mediaData : []);
-      const updated = (plansData || []).find((p) => String(p.id) === String(planId));
-      if (updated) setPlan(updated);
-    } catch (e) {
-      console.error(e);
-    }
+    // Refresh list for the folder currently open (was wrongly fetching root-only media before)
+    await loadDriveData({ silent: true });
     if (failCount > 0) {
       setSnackbar({ open: true, message: `${success} uploaded, ${failCount} failed. ${lastError}`, severity: 'warning' });
     } else {
@@ -485,39 +546,15 @@ const MediaDriveDetail = () => {
     }
   };
 
-  const mediaFiltered = useMemo(() => {
-    let list = [...(Array.isArray(media) ? media : [])];
-    if (categoryFilter === 'video') list = list.filter((m) => m.category === 'video');
-    else if (categoryFilter === 'image') list = list.filter((m) => m.category === 'image');
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      list = list.filter((m) => m.name?.toLowerCase().includes(q));
-    }
-    const now = new Date();
-    if (dateFilter === 'today') {
-      list = list.filter((m) => new Date(m.uploadDate || m.createdAt).toDateString() === now.toDateString());
-    } else if (dateFilter === 'week') {
-      const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      list = list.filter((m) => new Date(m.uploadDate || m.createdAt) >= weekAgo);
-    } else if (dateFilter === 'month') {
-      const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-      list = list.filter((m) => new Date(m.uploadDate || m.createdAt) >= monthAgo);
-    }
-    list.sort((a, b) => {
-      const da = new Date(a.uploadDate || a.createdAt || 0).getTime();
-      const db = new Date(b.uploadDate || b.createdAt || 0).getTime();
-      return sortOrder === 'desc' ? db - da : da - db;
-    });
-    return list;
-  }, [media, categoryFilter, searchQuery, dateFilter, sortOrder]);
-
-  const totalItems = mediaFiltered.length;
-  const totalPages = Math.ceil(totalItems / PAGE_SIZE) || 1;
+  const totalItems = driveMediaTotal;
+  const totalPages = Math.max(1, Math.ceil(driveMediaTotal / PAGE_SIZE));
   const pageSafe = Math.min(page, Math.max(0, totalPages - 1));
-  const mediaDisplayed = useMemo(() => {
-    const start = pageSafe * PAGE_SIZE;
-    return mediaFiltered.slice(start, start + PAGE_SIZE);
-  }, [mediaFiltered, pageSafe]);
+  const mediaDisplayed = media;
+
+  useEffect(() => {
+    const maxPage = Math.max(0, totalPages - 1);
+    if (page > maxPage) setPage(maxPage);
+  }, [totalPages, page]);
 
   const handlePageChange = (event, newPage) => setPage(newPage);
 
@@ -603,10 +640,10 @@ const MediaDriveDetail = () => {
             <Button
               variant="contained"
               size="small"
-              startIcon={<AddIcon />}
-              onClick={() => navigate('/media')}
+              startIcon={<CloudUploadIcon />}
+              onClick={() => setUploadDialogOpen(true)}
               disabled={getAvailableGB(plan) <= 0}
-              title={getAvailableGB(plan) <= 0 ? 'No space in this drive' : ''}
+              title={getAvailableGB(plan) <= 0 ? 'No space in this drive' : 'Upload files to this drive'}
             >
               Upload Media
             </Button>
@@ -726,10 +763,18 @@ const MediaDriveDetail = () => {
                   <ToggleButton value="grid"><ViewModuleIcon /></ToggleButton>
                 </ToggleButtonGroup>
                 {viewMode === 'grid' && (
-                  <ToggleButtonGroup value={gridSize} exclusive onChange={(e, v) => v && setGridSize(v)} size="small">
-                    <ToggleButton value="small">S</ToggleButton>
-                    <ToggleButton value="medium">M</ToggleButton>
-                    <ToggleButton value="large">L</ToggleButton>
+                  <ToggleButtonGroup
+                    value={gridSize}
+                    exclusive
+                    size="small"
+                    color="primary"
+                    onChange={(e, v) => {
+                      if (v !== null) setGridSize(v);
+                    }}
+                  >
+                    <ToggleButton value="small" aria-label="Small tiles">S</ToggleButton>
+                    <ToggleButton value="medium" aria-label="Medium tiles">M</ToggleButton>
+                    <ToggleButton value="large" aria-label="Large tiles">L</ToggleButton>
                   </ToggleButtonGroup>
                 )}
               </Box>
@@ -789,7 +834,16 @@ const MediaDriveDetail = () => {
                             <IconButton size="small" onClick={(e) => { e.stopPropagation(); setMoveCopyDialog({ open: true, type: 'folder', mode: 'move', item: f }); }} title="Move"><MoveIcon /></IconButton>
                             <IconButton size="small" onClick={(e) => { e.stopPropagation(); setMoveCopyDialog({ open: true, type: 'folder', mode: 'copy', item: f }); }} title="Copy"><CopyIcon /></IconButton>
                             <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleShareClick(f, 'folder'); }} title="Share"><ShareIcon /></IconButton>
-                            <IconButton size="small" onClick={(e) => { e.stopPropagation(); if (window.confirm(`Delete folder "${f.name}"?`)) handleDeleteFolder(f.id); }} title="Delete"><DeleteIcon /></IconButton>
+                            <IconButton
+                              size="small"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDeleteFolderDialog({ open: true, folderId: f.id, name: f.name || 'this folder' });
+                              }}
+                              title="Delete"
+                            >
+                              <DeleteIcon />
+                            </IconButton>
                           </Box>
                         }
                         sx={{
@@ -857,7 +911,7 @@ const MediaDriveDetail = () => {
                   ))}
                 </List>
               ) : (
-                <Grid container spacing={2}>
+                <Grid container spacing={gridSize === 'large' ? 3 : 2}>
                   {mediaDisplayed.map((item) => (
                     <Grid item {...gridConfig.cols} key={item.id}>
                       <Grow in timeout={80}>
@@ -886,7 +940,15 @@ const MediaDriveDetail = () => {
                             />
                           </Box>
                           <CardActionArea sx={{ height: '100%', p: 0 }} onClick={() => navigate(`/media/${item.id}`)}>
-                            <Box sx={{ width: '100%', height: 120, bgcolor: 'grey.200', borderRadius: '8px 8px 0 0', overflow: 'hidden' }}>
+                            <Box
+                              sx={{
+                                width: '100%',
+                                height: gridConfig.previewHeight,
+                                bgcolor: 'grey.200',
+                                borderRadius: '8px 8px 0 0',
+                                overflow: 'hidden',
+                              }}
+                            >
                               {item.category === 'video' ? (
                                 <Box component="video" src={getMediaUrl(item.url)} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} muted />
                               ) : (
@@ -946,6 +1008,34 @@ const MediaDriveDetail = () => {
         <DialogActions>
           <Button onClick={() => setDeleteDialog({ open: false, mediaId: null, ids: [], name: '' })}>Cancel</Button>
           <Button color="error" variant="contained" onClick={handleDeleteConfirm}>Delete</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={deleteFolderDialog.open}
+        onClose={() => !deleteFolderLoading && setDeleteFolderDialog({ open: false, folderId: null, name: '' })}
+        maxWidth="xs"
+        fullWidth
+        TransitionComponent={Fade}
+      >
+        <DialogTitle>Delete folder?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary">
+            Delete folder &quot;{deleteFolderDialog.name}&quot; and everything inside it? This cannot be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setDeleteFolderDialog({ open: false, folderId: null, name: '' })} disabled={deleteFolderLoading}>
+            Cancel
+          </Button>
+          <Button
+            color="error"
+            variant="contained"
+            onClick={handleDeleteFolderDialogConfirm}
+            disabled={deleteFolderLoading}
+          >
+            {deleteFolderLoading ? 'Deleting…' : 'Delete'}
+          </Button>
         </DialogActions>
       </Dialog>
 

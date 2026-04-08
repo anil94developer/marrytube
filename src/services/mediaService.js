@@ -108,11 +108,17 @@ export const uploadMediaForClientSmart = async ({ clientId, file, userPlanId, fo
   return result;
 };
 
-export const getFolders = async (clientId, userPlanId) => {
+/** Studio: folders for a client drive. parentFolderId null/undefined = root of that drive. */
+export const getFolders = async (clientId, userPlanId, parentFolderId) => {
   try {
-    const response = await axios.get(`/studio/clients/getFolders`, {
-      params: { userPlanId, clientId },
-    });
+    const params = { clientId };
+    if (userPlanId !== undefined && userPlanId !== null) {
+      params.userPlanId = userPlanId === 'default' ? 'default' : userPlanId;
+    }
+    if (parentFolderId !== undefined) {
+      params.parentFolderId = parentFolderId === null || parentFolderId === '' ? '' : parentFolderId;
+    }
+    const response = await axios.get(`/studio/clients/getFolders`, { params });
     if (response.data && response.data.success) {
       return response.data.folders;
     }
@@ -123,12 +129,22 @@ export const getFolders = async (clientId, userPlanId) => {
   }
 };
 
-export const createFolder = async ({ clientId, name, userPlanId }) => {
-  const res = await axios.post(`/studio/clients/${clientId}/folders`, {
+export const createFolder = async ({ clientId, name, userPlanId, parentFolderId }) => {
+  const body = {
     name,
     userPlanId: userPlanId || null,
-  });
+  };
+  if (parentFolderId !== undefined && parentFolderId !== null && parentFolderId !== '') {
+    body.parentFolderId = parentFolderId;
+  }
+  const res = await axios.post(`/studio/clients/${clientId}/folders`, body);
   return res.data.folder;
+};
+
+/** Studio: cascade-delete folder (same as user panel). */
+export const deleteStudioFolder = async (clientId, folderId) => {
+  const res = await axios.delete(`/studio/clients/${clientId}/folders/${folderId}`);
+  return res.data;
 };
 
 // —— Customer (user) APIs ——
@@ -194,6 +210,26 @@ export const getMediaList = async (userId, category = null, folderId = null, use
   } catch (error) {
     console.error('Failed to fetch media list:', error);
     return [];
+  }
+};
+
+/** Server-paged media list (pass page>=1, limit; optional search, datePreset, sort). Default order DESC. */
+export const getMediaListPaged = async (params = {}) => {
+  try {
+    const res = await axios.get('/media/list', { params });
+    if (res.data && Array.isArray(res.data.data)) {
+      return res.data;
+    }
+    return {
+      data: Array.isArray(res.data) ? res.data : [],
+      total: Array.isArray(res.data) ? res.data.length : 0,
+      page: 1,
+      limit: params.limit || 50,
+      totalPages: 1,
+    };
+  } catch (error) {
+    console.error('Failed to fetch paged media list:', error);
+    return { data: [], total: 0, page: 1, limit: 50, totalPages: 1 };
   }
 };
 

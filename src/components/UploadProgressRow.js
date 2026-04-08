@@ -1,6 +1,6 @@
 import React from 'react';
-import { ListItem, ListItemIcon, ListItemText, LinearProgress, Box, Typography, IconButton } from '@mui/material';
-import { VideoLibrary as VideoLibraryIcon, Image as ImageIcon, Close as CloseIcon } from '@mui/icons-material';
+import { ListItem, ListItemIcon, ListItemText, LinearProgress, Box, Typography, Button, Stack } from '@mui/material';
+import { VideoLibrary as VideoLibraryIcon, Image as ImageIcon } from '@mui/icons-material';
 
 const formatBytes = (bytes) => {
   if (bytes == null || bytes === 0) return '0 B';
@@ -18,7 +18,7 @@ const formatEta = (sec) => {
   return `${m}m ${s}s`;
 };
 
-export default function UploadProgressRow({ item, progress, onCancel, showCancel }) {
+export default function UploadProgressRow({ item, progress, onCancel, onRemoveFromQueue, showCancel = true }) {
   const isVideo = item?.category === 'video';
   const percent = progress?.percent ?? 0;
   const speed = progress?.speed ?? 0;
@@ -27,16 +27,28 @@ export default function UploadProgressRow({ item, progress, onCancel, showCancel
   const file = item?.file;
   const sizeStr = file ? formatBytes(file.size) : '';
 
+  const uploadingNow = status === 'uploading';
+  const canRemoveFromQueue =
+    typeof onRemoveFromQueue === 'function' && !uploadingNow && (status == null || status === 'waiting');
+
+  const secondary =
+    canRemoveFromQueue || (showCancel && uploadingNow) ? (
+      <Stack direction="row" spacing={0.5} alignItems="center" component="span">
+        {canRemoveFromQueue && (
+          <Button size="small" color="inherit" onClick={() => onRemoveFromQueue(item?.id)}>
+            Remove
+          </Button>
+        )}
+        {showCancel && uploadingNow && (
+          <Button size="small" color="inherit" onClick={() => onCancel?.(item?.id)}>
+            Cancel upload
+          </Button>
+        )}
+      </Stack>
+    ) : undefined;
+
   return (
-    <ListItem
-      secondaryAction={
-        showCancel && status === 'uploading' ? (
-          <IconButton edge="end" size="small" onClick={() => onCancel?.(item?.id)} title="Cancel">
-            <CloseIcon />
-          </IconButton>
-        ) : null
-      }
-    >
+    <ListItem secondaryAction={secondary}>
       <ListItemIcon sx={{ minWidth: 40 }}>
         {isVideo ? <VideoLibraryIcon color="primary" /> : <ImageIcon color="secondary" />}
       </ListItemIcon>

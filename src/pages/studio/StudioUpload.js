@@ -12,7 +12,6 @@ import {
   ListItem,
   ListItemText,
   ListItemIcon,
-  IconButton,
   FormControl,
   InputLabel,
   Select,
@@ -35,7 +34,6 @@ import {
   CloudUpload as CloudUploadIcon,
   VideoFile as VideoFileIcon,
   Image as ImageIcon,
-  Close as CloseIcon,
   Folder as FolderIcon,
   CreateNewFolder as CreateFolderIcon,
 } from '@mui/icons-material';
@@ -376,9 +374,9 @@ const StudioUpload = (props) => {
                           </Box>
                         }
                       />
-                      <IconButton edge="end" onClick={() => removeFile(fileItem.id)} disabled={uploading}>
-                        <CloseIcon />
-                      </IconButton>
+                      <Button size="small" color="inherit" onClick={() => removeFile(fileItem.id)} disabled={uploading}>
+                        Remove
+                      </Button>
                     </ListItem>
                   </Grow>
                 ))}

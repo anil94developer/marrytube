@@ -162,24 +162,40 @@ const MediaList = () => {
 
   const removeUploadFile = (id) => setUploadFiles((prev) => prev.filter((f) => f.id !== id));
 
-  const loadFolders = async () => {
-    const list = await getFoldersForUser();
+  /** Same drive as upload target: default drive → userPlanId null in API = param `default`. */
+  const getDriveIdForFolderApi = (plan) => {
+    if (!plan) return undefined;
+    if (plan.isDefault || plan.id === 'default') return 'default';
+    return plan.id;
+  };
+
+  const loadFoldersForDrive = async (plan) => {
+    const driveId = getDriveIdForFolderApi(plan);
+    if (driveId === undefined) {
+      setFolders([]);
+      return;
+    }
+    const list = await getFoldersForUser(undefined, driveId);
     setFolders(Array.isArray(list) ? list : []);
   };
 
+  /** Reload folder dropdown for the open upload dialog’s drive (supports `await loadFolders()` with no args). */
+  const loadFolders = async () => {
+    if (uploadDialog.plan) await loadFoldersForDrive(uploadDialog.plan);
+  };
+
   useEffect(() => {
-    if (uploadDialog.open) {
-      loadFolders();
+    if (uploadDialog.open && uploadDialog.plan) {
+      loadFoldersForDrive(uploadDialog.plan);
       setUploadFiles([]);
       setSelectedFolder('');
       setUploadCategory('all');
       setCreateFolderOpen(false);
       setNewFolderName('');
     }
-  }, [uploadDialog.open]);
+  }, [uploadDialog.open, uploadDialog.plan?.id]);
 
   const handleCreateFolder = async () => {
-    console.log(uploadDialog);
     const name = newFolderName.trim();
     if (!name) {
       setSnackbar({ open: true, message: 'Enter a folder name', severity: 'warning' });
