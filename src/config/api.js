@@ -1,6 +1,13 @@
 // API Configuration
-// Default to port 5001 to avoid common macOS reserved conflicts on 5000
-const API_BASE_URL =  'http://localhost:5001/api/';
+// Local app -> local backend, live app -> Render backend
+const LOCAL_API = 'http://localhost:5001/api/';
+const LIVE_API = 'https://marrytube-backend.onrender.com/api/';
+
+const isLocalHost =
+  typeof window !== 'undefined' &&
+  (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+
+const API_BASE_URL = isLocalHost ? LOCAL_API : LIVE_API;
 
 /** Base URL for media (backend root, without /api) */
 const MEDIA_BASE = API_BASE_URL.replace(/\/api\/?$/, '');
