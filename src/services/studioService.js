@@ -28,13 +28,15 @@ export const getStudioClients = async (studioId, filters = {}) => {
   if (filters.sort) params.sort = filters.sort;
   const res = await axios.get('/studio/clients', { params });
   const d = res.data;
+  // Paginated: { data: [...], total, page, ... }
   if (d && Array.isArray(d.data)) {
+    return d.data;
+  }
+  // Raw array from API
+  if (Array.isArray(d)) {
     return d;
   }
-  if (Array.isArray(d)) {
-    return { data: d, total: d.length, page: 1, limit: d.length, totalPages: 1 };
-  }
-  return { data: [], total: 0, page: 1, limit: 50, totalPages: 1 };
+  return [];
 };
 
 export const addStudioClient = async (clientData) => {
@@ -71,6 +73,7 @@ export const createStudioClientPaymentOrder = async (clientId, planData, returnU
   };
   if (planData.storage != null) body.storage = planData.storage;
   if (planData.period) body.period = planData.period;
+  if (planData.isRenew != null) body.isRenew = !!planData.isRenew;
   const res = await axios.post('/storage/create-studio-client-order', body);
   const data = res.data;
   if (data && data.success) {

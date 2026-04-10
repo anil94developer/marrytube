@@ -32,24 +32,7 @@ import {
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 import { getStoragePlans, createPaymentOrder, confirmPaymentSuccess } from '../services/storageService';
-
-const CASHFREE_SCRIPT = 'https://sdk.cashfree.com/js/v3/cashfree.js';
-const loadCashfree = () => {
-  if (window.Cashfree) return Promise.resolve(window.Cashfree);
-  return new Promise((resolve, reject) => {
-    if (document.querySelector(`script[src="${CASHFREE_SCRIPT}"]`)) {
-      if (window.Cashfree) resolve(window.Cashfree);
-      else reject(new Error('Cashfree not ready'));
-      return;
-    }
-    const s = document.createElement('script');
-    s.src = CASHFREE_SCRIPT;
-    s.async = true;
-    s.onload = () => resolve(window.Cashfree);
-    s.onerror = () => reject(new Error('Failed to load Cashfree'));
-    document.head.appendChild(s);
-  });
-};
+import { loadCashfree } from '../utils/cashfree';
 
 const StoragePlans = () => {
   const { user } = useAuth();
@@ -63,6 +46,8 @@ const StoragePlans = () => {
   const [loading, setLoading] = useState(false);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
   const paymentReturnHandled = useRef(false);
+  const renewAutoStartedRef = useRef(false);
+  const [renewMode, setRenewMode] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -110,7 +95,7 @@ const StoragePlans = () => {
   const getPrice = () => {
     if (!selectedPlan) return 0;
     if (selectedPlan.category === 'fixed') return parseFloat(selectedPlan.price) || 0;
-    return (storageAmount || 1) * (parseFloat(perGbPlanForPeriod?.price) || 0);
+    return parseFloat((storageAmount || 1) * (parseFloat(perGbPlanForPeriod?.price) || 0)).toFixed(2);
   };
 
   const getStorageToPurchase = () => {
@@ -132,12 +117,16 @@ const StoragePlans = () => {
     setStorageAmount(isNaN(v) ? 1 : Math.max(1, v));
   };
 
-  const handlePurchase = useCallback(async () => {
-    if (!selectedPlan) {
+  const handlePurchase = useCallback(async (planOverride = null, isRenewOverride = false) => {
+    const planToBuy = planOverride || selectedPlan;
+    if (!planToBuy) {
       setSnackbar({ open: true, message: 'Please select a plan', severity: 'error' });
       return;
     }
-    const storageToAdd = getStorageToPurchase();
+    const storageToAdd =
+      planToBuy.category === 'fixed'
+        ? (parseFloat(planToBuy.storage) || 0)
+        : getStorageToPurchase();
     if (storageToAdd < 1) {
       setSnackbar({ open: true, message: 'Please select at least 1 GB', severity: 'error' });
       return;
@@ -153,9 +142,10 @@ const StoragePlans = () => {
       const result = await createPaymentOrder(
         {
           storage: storageToAdd,
-          period: getPeriodToSend(),
-          price: getPrice(),
-          planId: selectedPlan?.id,
+          period: planToBuy.category === 'fixed' ? (planToBuy.period || 'month') : getPeriodToSend(),
+          price: planToBuy.category === 'fixed' ? (parseFloat(planToBuy.price) || 0) : getPrice(),
+          planId: planToBuy?.id,
+          isRenew: !!isRenewOverride,
         },
         returnUrl
       );
@@ -173,6 +163,25 @@ const StoragePlans = () => {
       setLoading(false);
     }
   }, [selectedPlan, period, storageAmount, perGbPlanForPeriod]);
+
+  // Renew deep-link: /storage-plans?renew=1&planId=<id>&auto=1
+  useEffect(() => {
+    const renew = searchParams.get('renew') === '1';
+    const auto = searchParams.get('auto') === '1';
+    const renewPlanId = searchParams.get('planId');
+    setRenewMode(renew);
+    if (!renew || !renewPlanId || plans.length === 0 || renewAutoStartedRef.current) return;
+    const found = plans.find((p) => String(p.id) === String(renewPlanId));
+    if (!found) return;
+
+    setSelectedPlanId(String(found.id));
+    // Keep dialog open as reliable fallback if auto-checkout is blocked by browser.
+    setDialogOpen(true);
+    if (auto) {
+      renewAutoStartedRef.current = true;
+      handlePurchase(found, true);
+    }
+  }, [searchParams, plans, handlePurchase]);
 
   return (
     <Container maxWidth="lg" sx={{ px: { xs: 1, sm: 2, md: 3 } }}>
@@ -278,7 +287,7 @@ const StoragePlans = () => {
                             onChange={handleStorageChange}
                             inputProps={{ min: 1 }}
                             size="small"
-                            sx={{ width: 80 }}
+                            sx={{ width: 120 }}
                             InputProps={{ endAdornment: <InputAdornment position="end">GB</InputAdornment> }}
                           />
                           <IconButton onClick={handleIncrement} color="primary" size="small">
@@ -312,12 +321,12 @@ const StoragePlans = () => {
               <Button
                 variant="contained"
                 size="large"
-                onClick={handlePurchase}
+                onClick={() => handlePurchase(null, renewMode)}
                 disabled={loading || !selectedPlan || getStorageToPurchase() < 1}
                 startIcon={<AttachMoney />}
                 sx={{ py: 1.25 }}
               >
-                {loading ? 'Processing...' : 'Purchase Now'}
+                {loading ? 'Processing...' : (renewMode ? 'Renew Now' : 'Purchase Now')}
               </Button>
             </DialogActions>
           </Dialog>

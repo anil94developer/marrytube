@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Container,
   Paper,
@@ -50,16 +50,21 @@ import {
 } from '@mui/icons-material';
 import { useDropzone } from 'react-dropzone';
 import { useAuth } from '../contexts/AuthContext';
-import { getMyPlans, moveMediaBetweenDrives } from '../services/storageService';
+import { getMyPlans, moveMediaBetweenDrives, getStoragePlans, createPaymentOrder, confirmPaymentSuccess } from '../services/storageService';
+import { loadCashfree } from '../utils/cashfree';
+import { resolveCatalogPlanForRenew } from '../utils/resolveCatalogPlanForRenew';
 import { getMediaList, uploadMediaSmart, getFoldersForUser, createFolderForUser, createShare } from '../services/mediaService';
 import { formatStorageWithUnits } from '../utils/storageFormat';
 import { getMediaUrl } from '../config/api';
 
 const BYTES_PER_GB = 1024 * 1024 * 1024;
+const RENEW_WINDOW_DAYS = 7;
 
 const MediaList = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const paymentReturnHandled = useRef(false);
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
@@ -82,6 +87,7 @@ const MediaList = () => {
   const [createFolderLoading, setCreateFolderLoading] = useState(false);
   const [uploadCategory, setUploadCategory] = useState('all');
   const [mediaInPlans, setMediaInPlans] = useState({});
+  const [renewLoading, setRenewLoading] = useState(false);
 
   const loadPlans = async () => {
     setLoading(true);
@@ -101,6 +107,83 @@ const MediaList = () => {
   useEffect(() => {
     loadPlans();
   }, []);
+
+  // After Cashfree redirect: /media?order_id=...&payment=success
+  useEffect(() => {
+    const orderId = searchParams.get('order_id');
+    const paymentSuccess = searchParams.get('payment') === 'success';
+    if (!orderId || !paymentSuccess || paymentReturnHandled.current) return;
+    paymentReturnHandled.current = true;
+    (async () => {
+      try {
+        const result = await confirmPaymentSuccess(orderId);
+        setSearchParams({}, { replace: true });
+        await loadPlans();
+        setSnackbar({ open: true, message: result.message || 'Payment successful! Plan renewed.', severity: 'success' });
+      } catch (err) {
+        setSnackbar({ open: true, message: err.message || 'Payment confirmation failed', severity: 'error' });
+        setSearchParams({}, { replace: true });
+        paymentReturnHandled.current = false;
+      }
+    })();
+  }, [searchParams, setSearchParams]);
+
+  const handleRenewCheckout = async (plan) => {
+    setRenewLoading(true);
+    try {
+      const catalogPlans = await getStoragePlans();
+      const catalogPlan = resolveCatalogPlanForRenew(plan, catalogPlans);
+      if (!catalogPlan) {
+        setSnackbar({
+          open: true,
+          message: 'Could not match your drive to a storage plan. Open Storage Plans or contact support.',
+          severity: 'error',
+        });
+        return;
+      }
+      let storageToAdd;
+      let period;
+      let price;
+      if (catalogPlan.category === 'fixed') {
+        storageToAdd = parseFloat(catalogPlan.storage) || 0;
+        period = catalogPlan.period || 'month';
+        price = parseFloat(catalogPlan.price) || 0;
+      } else {
+        storageToAdd = Math.max(1, parseFloat(plan.totalStorage) || 1);
+        period = catalogPlan.period === 'year' ? 'year' : 'month';
+        price = storageToAdd * (parseFloat(catalogPlan.price) || 0);
+      }
+      if (storageToAdd < 1 || price <= 0) {
+        setSnackbar({ open: true, message: 'Invalid plan price. Open Storage Plans to purchase.', severity: 'error' });
+        return;
+      }
+      const origin = window.location.origin;
+      const isLocalhost = /localhost|127\.0\.0\.1/i.test(window.location.hostname);
+      const base = isLocalhost ? origin.replace(/^https:/, 'http:') : origin;
+      const returnUrl = `${base}/media?order_id={order_id}&payment=success`;
+      const result = await createPaymentOrder(
+        {
+          storage: storageToAdd,
+          period,
+          price,
+          planId: catalogPlan.id,
+          isRenew: true,
+        },
+        returnUrl
+      );
+      const Cashfree = await loadCashfree();
+      const mode = result.cashfreeMode || (process.env.NODE_ENV === 'production' ? 'production' : 'sandbox');
+      const cashfree = Cashfree({ mode });
+      await cashfree.checkout({
+        paymentSessionId: result.paymentSessionId,
+        returnUrl: result.returnUrl,
+      });
+    } catch (e) {
+      setSnackbar({ open: true, message: e.message || 'Payment could not start', severity: 'error' });
+    } finally {
+      setRenewLoading(false);
+    }
+  };
 
   const loadMediaForPlan = async (planId) => {
     const id = planId === 'default' ? 'default' : planId;
@@ -142,6 +225,18 @@ const MediaList = () => {
     const total = Number(plan.totalStorage) || 0;
     const usedBytes = Number(plan.usedStorage) || 0;
     return total - usedBytes / BYTES_PER_GB;
+  };
+
+  const getExpiryMeta = (expiryDate) => {
+    if (!expiryDate) return { isNearExpiry: false, isExpired: false, daysLeft: null };
+    const expiryMs = new Date(expiryDate).getTime();
+    if (Number.isNaN(expiryMs)) return { isNearExpiry: false, isExpired: false, daysLeft: null };
+    const nowMs = Date.now();
+    const diffMs = expiryMs - nowMs;
+    const daysLeft = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+    const isExpired = diffMs < 0;
+    const isNearExpiry = !isExpired && daysLeft <= RENEW_WINDOW_DAYS;
+    return { isNearExpiry, isExpired, daysLeft };
   };
 
   const onDrop = useCallback((acceptedFiles) => {
@@ -343,6 +438,9 @@ const MediaList = () => {
                     const availableGB = getAvailableGB(plan);
                     const noSpace = availableGB <= 0;
                     const isDefault = plan.isDefault === true;
+                    const { isNearExpiry, isExpired, daysLeft } = getExpiryMeta(plan.expiryDate);
+                    const canUpload = !isExpired && !noSpace;
+                    const canShare = !isExpired;
                     return (
                       <Grid item xs={12} sm={6} md={4} key={planId}>
                         <Card elevation={3} sx={{ borderRadius: 3, bgcolor: 'grey.50', display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -365,6 +463,13 @@ const MediaList = () => {
                                   )}
                                   {plan.expiryDate && (
                                     <Chip icon={<CalendarIcon />} label={`Expiry: ${new Date(plan.expiryDate).toLocaleDateString()}`} size="small" />
+                                  )}
+                                  {(isNearExpiry || isExpired) && (
+                                    <Chip
+                                      size="small"
+                                      color={isExpired ? 'error' : 'warning'}
+                                      label={isExpired ? 'Expired - renew now' : `Expiring in ${daysLeft} day${daysLeft === 1 ? '' : 's'}`}
+                                    />
                                   )}
                                   <Chip label={plan.status || 'active'} color={plan.status === 'active' ? 'success' : 'default'} size="small" />
                                 </Box>
@@ -390,7 +495,8 @@ const MediaList = () => {
                                 size="small"
                                 startIcon={<ShareIcon />}
                                 onClick={(e) => { e.stopPropagation(); handleShareDrive(plan); }}
-                                title="Get shareable link"
+                                disabled={!canShare}
+                                title={!canShare ? 'Expired plan cannot be shared' : 'Get shareable link'}
                               >
                                 Share drive
                               </Button>
@@ -398,11 +504,11 @@ const MediaList = () => {
                                 variant="contained"
                                 size="small"
                                 startIcon={<AddIcon />}
-                                onClick={(e) => { e.stopPropagation(); if (!noSpace) setUploadDialog({ open: true, plan: plan}); }}
-                                disabled={noSpace}
-                                title={noSpace ? 'No space' : ''}
+                                onClick={(e) => { e.stopPropagation(); if (canUpload) setUploadDialog({ open: true, plan: plan}); }}
+                                disabled={!canUpload}
+                                title={isExpired ? 'Expired plan cannot upload' : (noSpace ? 'No space' : '')}
                               >
-                                {noSpace ? 'No space' : 'Upload Media'}
+                                {isExpired ? 'Expired' : (noSpace ? 'No space' : 'Upload Media')}
                               </Button>
                               <Button
                                 variant="outlined"
@@ -412,6 +518,20 @@ const MediaList = () => {
                               >
                                 Move data
                               </Button>
+                              {!isDefault && (isNearExpiry || isExpired) && (
+                                <Button
+                                  variant="contained"
+                                  size="small"
+                                  color="warning"
+                                  disabled={renewLoading}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleRenewCheckout(plan);
+                                  }}
+                                >
+                                  {renewLoading ? 'Opening…' : 'Renew Plan'}
+                                </Button>
+                              )}
                             </Box>
                           </Box>
                         </Card>

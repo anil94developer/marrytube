@@ -109,7 +109,8 @@ const StudioClients = () => {
   };
 
   const filteredClients = useMemo(() => {
-    let list = [...(clients || [])];
+    const raw = Array.isArray(clients) ? clients : [];
+    let list = [...raw];
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       list = list.filter(client =>

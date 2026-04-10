@@ -76,9 +76,10 @@ import { getFolders } from '../../services/mediaService';
 import { confirmPaymentSuccess } from '../../services/storageService';
 import { formatStorageWithUnits, formatStorageGB } from '../../utils/storageFormat';
 import { getMediaUrl } from '../../config/api';
+import { loadCashfree } from '../../utils/cashfree';
+import { resolveCatalogPlanForRenew } from '../../utils/resolveCatalogPlanForRenew';
 import StudioUpload from './StudioUpload';
 
-const CASHFREE_SCRIPT = 'https://sdk.cashfree.com/js/v3/cashfree.js';
 /** Flat folder list with "Parent / Child" labels for move destination picker */
 function foldersWithPathLabels(folders) {
   if (!Array.isArray(folders) || folders.length === 0) return [];
@@ -96,23 +97,6 @@ function foldersWithPathLabels(folders) {
     .map((f) => ({ ...f, pathLabel: pathLabel(f) }))
     .sort((a, b) => (a.pathLabel || '').localeCompare(b.pathLabel || ''));
 }
-
-const loadCashfree = () => {
-  if (window.Cashfree) return Promise.resolve(window.Cashfree);
-  return new Promise((resolve, reject) => {
-    if (document.querySelector(`script[src="${CASHFREE_SCRIPT}"]`)) {
-      if (window.Cashfree) resolve(window.Cashfree);
-      else reject(new Error('Cashfree not ready'));
-      return;
-    }
-    const s = document.createElement('script');
-    s.src = CASHFREE_SCRIPT;
-    s.async = true;
-    s.onload = () => resolve(window.Cashfree);
-    s.onerror = () => reject(new Error('Failed to load Cashfree'));
-    document.head.appendChild(s);
-  });
-};
 
 const StudioClientDetails = () => {
   const { id } = useParams();
@@ -150,6 +134,7 @@ const StudioClientDetails = () => {
   const [moveFilter, setMoveFilter] = useState('all'); // 'all' | 'video' | 'image' - follows tabValue when dialog opens
   const [previewMedia, setPreviewMedia] = useState(null);
   const [shareDriveDialog, setShareDriveDialog] = useState({ open: false, plan: null, link: '', loading: false });
+  const [renewLoading, setRenewLoading] = useState(false);
 
   const BYTES_PER_GB = 1024 * 1024 * 1024;
   const EXPIRY_NEAR_DAYS = 10;
@@ -296,6 +281,52 @@ const StudioClientDetails = () => {
     }
 
     return filtered;
+  };
+
+  /** Renew: same flow as customer /media — resolve catalog plan, Cashfree checkout, return to this page. */
+  const handleRenewCheckout = async (drivePlan) => {
+    setRenewLoading(true);
+    try {
+      const catalogPlans = await fetchStoragePlans();
+      const catalogPlan = resolveCatalogPlanForRenew(drivePlan, catalogPlans || []);
+      if (!catalogPlan) {
+        setSnackbar({
+          open: true,
+          message: 'Could not match this drive to a storage plan. Use Purchase more storage to choose a plan.',
+          severity: 'error',
+        });
+        return;
+      }
+      const planPayload = {
+        planId: catalogPlan.id,
+        period: catalogPlan.period,
+        isRenew: true,
+      };
+      if (catalogPlan.category === 'per_gb') {
+        planPayload.storage = Math.max(1, parseFloat(drivePlan.totalStorage) || 1);
+      }
+      const origin = window.location.origin;
+      const isLocalhost = /localhost|127\.0\.0\.1/i.test(window.location.hostname);
+      const base = isLocalhost ? origin.replace(/^https:/, 'http:') : origin;
+      const returnUrl = `${base}/studio/clients/${id}?order_id={order_id}&payment=success`;
+
+      const result = await createStudioClientPaymentOrder(id, planPayload, returnUrl);
+      const Cashfree = await loadCashfree();
+      const mode = result.cashfreeMode || (process.env.NODE_ENV === 'production' ? 'production' : 'sandbox');
+      const cashfree = Cashfree({ mode });
+      await cashfree.checkout({
+        paymentSessionId: result.paymentSessionId,
+        returnUrl: result.returnUrl,
+      });
+    } catch (error) {
+      setSnackbar({
+        open: true,
+        message: error.message || 'Failed to start payment',
+        severity: 'error',
+      });
+    } finally {
+      setRenewLoading(false);
+    }
   };
 
   const handlePurchase = async () => {
@@ -558,12 +589,13 @@ const StudioClientDetails = () => {
                                     color="warning"
                                     size="small"
                                     startIcon={<RenewIcon />}
+                                    disabled={renewLoading}
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      setPurchaseDialog({ open: true });
+                                      handleRenewCheckout(plan);
                                     }}
                                   >
-                                    Renew
+                                    {renewLoading ? 'Opening…' : 'Renew'}
                                   </Button>
                                 )}
                                 <Button

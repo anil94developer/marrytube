@@ -25,9 +25,11 @@ export const getDashboard = async () => {
   }
 };
 
-/** Get my drives (purchased/default plans) for logged-in user — same shape as studio client plans */
-export const getMyPlans = async () => {
-  const res = await axios.get('/storage/my-plans');
+/** Get my purchased plans. Pass includeDefault=true to also include free default drive. */
+export const getMyPlans = async (includeDefault = false) => {
+  const res = await axios.get('/storage/my-plans', {
+    params: includeDefault ? { includeDefault: 1 } : undefined,
+  });
   return Array.isArray(res.data) ? res.data : [];
 };
 
@@ -80,6 +82,7 @@ export const createPaymentOrder = async (planData, returnUrl) => {
     price: planData.price,
   };
   if (planData.planId != null) body.planId = planData.planId;
+  if (planData.isRenew != null) body.isRenew = !!planData.isRenew;
   if (returnUrl) body.returnUrl = returnUrl;
   const res = await axios.post('/storage/create-order', body);
   const data = res.data;
